@@ -1,0 +1,468 @@
+/**************************************************************************************************************
+													TABLAS
+**************************************************************************************************************/
+
+-- tabla temporal para la obtención de listados de comprobación. 
+create table TMP_Listados_IBI (
+	 --Usuario que realiza la consulta
+	 USUARIO			CHAR(30) DEFAULT USER NOT NULL,
+     --Identificacion del Bien Inmueble
+	 COD_DELEGACION		CHAR(2),
+     COD_MUNICIPIO		CHAR(3),
+     CLASE_IBI			CHAR(2),
+     RC_NUM_PARCELA		CHAR(14),
+     RC_NUM_SECUENCIAL	CHAR(4),
+     RC_PRIMER_CONTROL	CHAR(1),
+     RC_SEGUNDO_CONTROL	CHAR(1),
+     RC_NUM_FIJO		CHAR(8),
+     IDENTIFICACION_IBI	CHAR(15),
+     --Domicilio Tributario
+     COD_PROVINCIA		CHAR(2),
+     NOMBRE_PROVINCIA	CHAR(25),
+     COD_MUNICIPIO_DGC	CHAR(3),
+     COD_MUNICIPIO_INE	CHAR(3),
+     NOMBRE_MUNICIPIO	CHAR(40),
+     NOMBRE_ENTIDAD_MENOR	CHAR(30),
+     COD_VIA_PUBLICA	CHAR(5),
+     TIPO_VIA			CHAR(5),
+     NOMBRE_VIA			CHAR(25),
+     PRIMER_NUMERO		CHAR(4),
+     PRIMERA_LETRA		CHAR(1),
+     SEGUNDO_NUMERO		CHAR(4),
+     SEGUNDA_LETRA		CHAR(1),
+     KILOMETRO			CHAR(5),
+     BLOQUE			 	CHAR(4),
+     ESCALERA			CHAR(2),
+     PLANTA			 	CHAR(3),
+     PUERTA			 	CHAR(3),
+     TEXTO_DIRECCION	CHAR(25),
+     CODIGO_POSTAL		CHAR(5),
+     DISTRITO_MUNICIPAL	CHAR(2),
+     COD_MUNICIPIO_AGRAGACION	CHAR(3),
+     COD_ZONA			CHAR(2),
+     COD_POLIGONO		CHAR(3),
+     COD_PARCELA		CHAR(5),
+     NOMBRE_PARAJE		CHAR(30),
+     --Datos económicos de la Parcela
+     YEAR_PADRON		CHAR(4),
+     VALOR_CATASTRAL	FLOAT,
+     VC_SUELO			FLOAT,
+     VC_CONSTRUCCION	FLOAT,
+     BASE_LIQUIDABLE	FLOAT,
+     CLAVE_USO			CHAR(1),
+     VC_BONIFICADO		FLOAT,
+     CLAVE_BONIFICACION	CHAR(1),
+     SUPERFICIE_CONSTRUIDA	FLOAT,
+     SUPERFICIE_SUELO	FLOAT,
+     COEFICIENTE_PROPIEDAD	FLOAT,
+     VALOR_BASE			FLOAT,
+     COD_VALOR_BASE		CHAR(1),
+     YEAR_EFECTOS_VC	CHAR(4),
+     VC_EFECTOS_IBI		FLOAT,
+     YEAR_REVISION		CHAR(4),
+     YEAR_REVISION_PARCIAL	CHAR(4),
+     PERIODO_VIGENCIA	CHAR(4),
+     --Informacion de titularidad del bien inmueble
+     COD_DERECHO		CHAR(2),
+     NUMERO_TITULARES	CHAR(4),
+     TIPO_TITULARES		CHAR(1),
+     COMPLEMENTO_TITULARIDAD	CHAR(20),
+     --Identificación del Sujeto Pasivo del IBI
+     NIF			 	CHAR(9),
+     NOMBRE			 	CHAR(60),
+     CLAVE_IDENTIFICACION	CHAR(8),
+     --Domicilio Fiscal del Sujeto Pasivo
+     COD_PROVINCIA_FISCAL	CHAR(2),
+     NOMBRE_PROVINCIA_FISCAL	CHAR(25),
+     COD_MUNICIPIO_DGC_FISCAL	CHAR(3),
+     COD_MUNICIPIO_INE_FISCAL	CHAR(3),
+     NOMBRE_MUNICIPIO_FISCAL	CHAR(40),
+     NOMBRE_ENTIDAD_MENOR_FISCAL	CHAR(30),
+     COD_VIA_PUBLICA_FISCAL	CHAR(5),
+     TIPO_VIA_FISCAL		CHAR(5),
+     NOMBRE_VIA_FISCAL		CHAR(25),
+     PRIMER_NUMERO_FISCAL	CHAR(4),
+     PRIMERA_LETRA_FISCAL	CHAR(1),
+     SEGUNDO_NUMERO_FISCAL	CHAR(4),
+     SEGUNDA_LETRA_FISCAL	CHAR(1),
+     KILOMETRO_FISCAL		CHAR(5),
+     BLOQUE_FISCAL			CHAR(4),
+     ESCALERA_FISCAL		CHAR(2),
+     PLANTA_FISCAL			CHAR(3),
+     PUERTA_FISCAL			CHAR(3),
+     TEXTO_DIRECCION_FISCAL	CHAR(25),
+     CODIGO_POSTAL_FISCAL	CHAR(5),
+     APARTADO_CORREOS_FISCAL	CHAR(5),
+     --Datos del Conyuge
+     NIF_CONYUGE			CHAR(9),
+     NOMBRE_CONYUGE			CHAR(60),
+     --Informacion de la Alteracion
+     CLASE_ALTERACION		CHAR(4),
+     TIPO_EXPEDIENTE		CHAR(4),
+     FECHA_ALTERACION		CHAR(8),
+     YEAR_EXPEDIENTE		CHAR(4),
+     REFERENCIA_EXPEDIENTE	CHAR(13),
+     YEAR_EXPEDIENTE_EC		CHAR(4),
+     REFERENCIA_EXPEDIENTE_EC	CHAR(13),
+     COD_ENTIDAD_COLABORADORA	CHAR(3), 	 
+     CARGADO				CHAR(1) DEFAULT 'N',
+     F_GRABACION			DATE DEFAULT SYSDATE
+) TABLESPACE TEMPORALES;
+
+-- Para realizar listados de comparación
+CREATE TABLE TMP_LISTADOS_IBI_COMP(
+	--Usuario que realiza la consulta
+	USUARIO			CHAR(30) DEFAULT USER NOT NULL,	
+	RC_NUM_PARCELA			CHAR(14),		
+	RC_NUM_SECUENCIAL		CHAR(4),			 
+	RC_PRIMER_CONTROL		CHAR(1),
+	RC_SEGUNDO_CONTROL	CHAR(1),
+	--Valores del año de la consulta
+	NIF						CHAR(10),
+	NOMBRE					CHAR(60),
+	DIRECCION_FISCAL		CHAR(50),
+	VALOR_CATASTRAL		FLOAT,
+	BASE_LIQUIDABLE		FLOAT,
+	--Valores del año anterior		
+	BD_NIF					CHAR(10),
+	BD_NOMBRE				CHAR(60),
+	BD_DIRECCION_FISCAL	CHAR(50),	
+	BD_VALOR_CATASTRAL	FLOAT,
+	BD_BASE_LIQUIDABLE	FLOAT
+) TABLESPACE TEMPORALES;
+
+
+/**************************************************************************************************************
+													PROCEDIMIENTOS
+**************************************************************************************************************/
+
+
+
+/**************************************************************************************************************/
+
+--Procedimiento de selección de información para la impresión de consultas
+--Parámetros:	xMUNICIPIO: código del municipio cuya información se está consultando.
+--				xTIPO_LISTADO: tipo de información que se quiere obtener
+--				Valores para xTIPO_LISTADO: 
+--							1: Altas nuevas con respecto al padrón del año anterior 		
+--							2:	Comparación con la información del año anterior
+--							Si los tipos de variación son CONT o EV01 tendremos que comparar sólo con 
+--							los registros que tuvieron variación ('S' en VARIACION de la tabla REFERENCIAS_BANCOS)
+CREATE OR REPLACE PROCEDURE IMPRIME_LISTADOS_IBI(
+				xMUNICIPIO 			IN	CHAR,
+				xYEAR					IN CHAR,
+				xTIPO_LISTADO 		IN INTEGER,
+				xCLASE_ALTERACION	IN	CHAR)				
+AS
+	TYPE tCURSOR IS REF CURSOR;  -- define REF CURSOR type 
+    vCURSOR    	 	tCURSOR;     -- declare cursor variable 
+    vSentencia		VARCHAR2(2000);
+    vIBI				tmp_padrones_ibi%ROWTYPE;
+    vCOMP      	tmp_listados_ibi_comp%ROWTYPE;
+    XID 				INTEGER;
+    xVARIACION 	CHAR(1);
+    xCONTINUAR		BOOLEAN DEFAULT TRUE;
+BEGIN
+
+	DELETE FROM TMP_LISTADOS_IBI WHERE USUARIO=USER;
+	DELETE FROM TMP_LISTADOS_IBI_COMP WHERE USUARIO=USER;
+
+	--Asignamos valor a vSentencia teniendo en cuenta el tipo de listado que se quiere obtener
+	IF (xTIPO_LISTADO=1)  THEN   --altas nuevas con respecto al padrón del año anterior
+		vSentencia:='SELECT * FROM TMP_PADRONES_IBI WHERE COD_MUNICIPIO=:xMUNICIPIO AND CLASE_IBI<>''RU''';
+	
+		--Asignar consulta a cursor, abrirlo y recorrerlo 
+    	OPEN vCURSOR FOR vSENTENCIA USING xMUNICIPIO;
+    	LOOP
+			FETCH vCURSOR INTO vIBI;
+   	   		EXIT WHEN vCURSOR%NOTFOUND;
+   	   		
+   	   		BEGIN
+   	   			SELECT ID INTO XID 
+   	   			FROM IBI 
+   	   			WHERE MUNICIPIO=vIBI.COD_MUNICIPIO AND YEAR=vIBI.YEAR_PADRON-1 AND
+   	   				  REF_CATASTRAL=vIBI.RC_NUM_PARCELA AND
+   	   				  NUMERO_SECUENCIAL=vIBI.RC_NUM_SECUENCIAL;
+   	   			EXCEPTION
+   	   				WHEN NO_DATA_FOUND THEN
+
+						INSERT INTO TMP_Listados_IBI (COD_DELEGACION,COD_MUNICIPIO,CLASE_IBI,RC_NUM_PARCELA,
+								RC_NUM_SECUENCIAL,RC_PRIMER_CONTROL,RC_SEGUNDO_CONTROL,RC_NUM_FIJO,IDENTIFICACION_IBI,
+								COD_PROVINCIA,NOMBRE_PROVINCIA,COD_MUNICIPIO_DGC,COD_MUNICIPIO_INE,NOMBRE_MUNICIPIO,
+								NOMBRE_ENTIDAD_MENOR,COD_VIA_PUBLICA,TIPO_VIA,NOMBRE_VIA,PRIMER_NUMERO,PRIMERA_LETRA,
+								SEGUNDO_NUMERO,SEGUNDA_LETRA,KILOMETRO,BLOQUE,ESCALERA,PLANTA,PUERTA,TEXTO_DIRECCION,
+								CODIGO_POSTAL,DISTRITO_MUNICIPAL,COD_MUNICIPIO_AGRAGACION,COD_ZONA,COD_POLIGONO,COD_PARCELA,
+								NOMBRE_PARAJE,YEAR_PADRON,VALOR_CATASTRAL,VC_SUELO,VC_CONSTRUCCION,BASE_LIQUIDABLE,CLAVE_USO,
+								VC_BONIFICADO,CLAVE_BONIFICACION,SUPERFICIE_CONSTRUIDA,SUPERFICIE_SUELO,
+								COEFICIENTE_PROPIEDAD,VALOR_BASE,COD_VALOR_BASE,YEAR_EFECTOS_VC,VC_EFECTOS_IBI,YEAR_REVISION,
+								YEAR_REVISION_PARCIAL,PERIODO_VIGENCIA,COD_DERECHO,NUMERO_TITULARES,TIPO_TITULARES,
+								COMPLEMENTO_TITULARIDAD,NIF,NOMBRE,CLAVE_IDENTIFICACION,COD_PROVINCIA_FISCAL,
+								NOMBRE_PROVINCIA_FISCAL,COD_MUNICIPIO_DGC_FISCAL,COD_MUNICIPIO_INE_FISCAL,
+								NOMBRE_MUNICIPIO_FISCAL,NOMBRE_ENTIDAD_MENOR_FISCAL,COD_VIA_PUBLICA_FISCAL,TIPO_VIA_FISCAL,
+								NOMBRE_VIA_FISCAL,PRIMER_NUMERO_FISCAL,PRIMERA_LETRA_FISCAL,SEGUNDO_NUMERO_FISCAL,
+								SEGUNDA_LETRA_FISCAL,KILOMETRO_FISCAL,BLOQUE_FISCAL,ESCALERA_FISCAL,PLANTA_FISCAL,
+								PUERTA_FISCAL,TEXTO_DIRECCION_FISCAL,CODIGO_POSTAL_FISCAL,APARTADO_CORREOS_FISCAL,     
+								NIF_CONYUGE,NOMBRE_CONYUGE,CLASE_ALTERACION,TIPO_EXPEDIENTE,FECHA_ALTERACION,
+								YEAR_EXPEDIENTE,REFERENCIA_EXPEDIENTE,YEAR_EXPEDIENTE_EC,REFERENCIA_EXPEDIENTE_EC,
+								COD_ENTIDAD_COLABORADORA,CARGADO,F_GRABACION)    
+     					VALUES (vIBI.COD_DELEGACION,vIBI.COD_MUNICIPIO,vIBI.CLASE_IBI,vIBI.RC_NUM_PARCELA,
+     							vIBI.RC_NUM_SECUENCIAL,vIBI.RC_PRIMER_CONTROL,vIBI.RC_SEGUNDO_CONTROL,vIBI.RC_NUM_FIJO,
+     							vIBI.IDENTIFICACION_IBI,vIBI.COD_PROVINCIA,vIBI.NOMBRE_PROVINCIA,vIBI.COD_MUNICIPIO_DGC,
+     							vIBI.COD_MUNICIPIO_INE,vIBI.NOMBRE_MUNICIPIO,vIBI.NOMBRE_ENTIDAD_MENOR,vIBI.COD_VIA_PUBLICA,
+     							vIBI.TIPO_VIA,vIBI.NOMBRE_VIA,vIBI.PRIMER_NUMERO,vIBI.PRIMERA_LETRA,vIBI.SEGUNDO_NUMERO,
+     							vIBI.SEGUNDA_LETRA,vIBI.KILOMETRO,vIBI.BLOQUE,vIBI.ESCALERA,vIBI.PLANTA,vIBI.PUERTA,
+     							vIBI.TEXTO_DIRECCION,vIBI.CODIGO_POSTAL,vIBI.DISTRITO_MUNICIPAL,
+     							vIBI.COD_MUNICIPIO_AGRAGACION,vIBI.COD_ZONA,vIBI.COD_POLIGONO,vIBI.COD_PARCELA,
+     							vIBI.NOMBRE_PARAJE,vIBI.YEAR_PADRON,vIBI.VALOR_CATASTRAL,vIBI.VC_SUELO,vIBI.VC_CONSTRUCCION,
+     							vIBI.BASE_LIQUIDABLE,vIBI.CLAVE_USO,vIBI.VC_BONIFICADO,vIBI.CLAVE_BONIFICACION,
+     							vIBI.SUPERFICIE_CONSTRUIDA,vIBI.SUPERFICIE_SUELO,vIBI.COEFICIENTE_PROPIEDAD,vIBI.VALOR_BASE,
+     							vIBI.COD_VALOR_BASE,vIBI.YEAR_EFECTOS_VC,vIBI.VC_EFECTOS_IBI,vIBI.YEAR_REVISION,
+     							vIBI.YEAR_REVISION_PARCIAL,vIBI.PERIODO_VIGENCIA,vIBI.COD_DERECHO,vIBI.NUMERO_TITULARES,
+     							vIBI.TIPO_TITULARES,vIBI.COMPLEMENTO_TITULARIDAD,vIBI.NIF,vIBI.NOMBRE,
+     							vIBI.CLAVE_IDENTIFICACION,vIBI.COD_PROVINCIA_FISCAL,vIBI.NOMBRE_PROVINCIA_FISCAL,
+     							vIBI.COD_MUNICIPIO_DGC_FISCAL,vIBI.COD_MUNICIPIO_INE_FISCAL,vIBI.NOMBRE_MUNICIPIO_FISCAL,
+     							vIBI.NOMBRE_ENTIDAD_MENOR_FISCAL,vIBI.COD_VIA_PUBLICA_FISCAL,vIBI.TIPO_VIA_FISCAL,
+     							vIBI.NOMBRE_VIA_FISCAL,vIBI.PRIMER_NUMERO_FISCAL,vIBI.PRIMERA_LETRA_FISCAL,
+     							vIBI.SEGUNDO_NUMERO_FISCAL,vIBI.SEGUNDA_LETRA_FISCAL,vIBI.KILOMETRO_FISCAL,
+     							vIBI.BLOQUE_FISCAL,vIBI.ESCALERA_FISCAL,vIBI.PLANTA_FISCAL,vIBI.PUERTA_FISCAL,
+     							vIBI.TEXTO_DIRECCION_FISCAL,vIBI.CODIGO_POSTAL_FISCAL,vIBI.APARTADO_CORREOS_FISCAL,
+     							vIBI.NIF_CONYUGE,vIBI.NOMBRE_CONYUGE,vIBI.CLASE_ALTERACION,vIBI.TIPO_EXPEDIENTE,
+     							vIBI.FECHA_ALTERACION,vIBI.YEAR_EXPEDIENTE,vIBI.REFERENCIA_EXPEDIENTE,
+     							vIBI.YEAR_EXPEDIENTE_EC,vIBI.REFERENCIA_EXPEDIENTE_EC,vIBI.COD_ENTIDAD_COLABORADORA,
+     							vIBI.CARGADO,vIBI.F_GRABACION);   		
+     		END;
+    	END LOOP;
+		CLOSE vCURSOR;
+	
+	ELSIF (xTIPO_LISTADO=2) THEN
+		vSentencia:='SELECT USER,p.rc_num_parcela,p.rc_num_secuencial,p.rc_primer_control,p.rc_segundo_control,p.nif,p.nombre,'||
+			'trim(trim(p.tipo_via_fiscal)||'' ''||trim(p.nombre_via_fiscal)||'' ''||trim(p.primer_numero_fiscal)||'' ''||'||
+			'trim(p.escalera_fiscal)||'' ''||trim(p.planta_fiscal)||'' ''||trim(p.puerta_fiscal)) AS DIRECCION_FISCAL,'||
+			'p.valor_catastral,p.base_liquidable,i.nif AS BD_NIF,i.nombre AS BD_NOMBRE,'||
+			'trim(trim(i.tipo_via_fiscal)||'' ''||trim(i.nombre_via_fiscal)||'' ''||'||
+			'trim(i.primer_numero_fiscal)||'' ''||trim(i.escalera_fiscal)||'' ''||trim(i.planta_fiscal)||'' ''||'||
+			'trim(i.puerta_fiscal)) AS BD_DIRECCION_FISCAL,i.valor_catastral AS BD_VALOR_CATASTRAL,'||
+			'i.base_liquidable AS BD_BASE_LIQUIDABLE '||
+			'FROM tmp_padrones_ibi p JOIN ibi i ON p.cod_municipio=i.municipio AND p.cod_municipio=:xMUNICIPIO '|| 
+			'AND p.year_padron=:xYEAR AND i.YEAR=p.year_padron-1 AND p.rc_num_parcela=i.ref_catastral AND '||
+			'p.rc_num_secuencial=i.numero_secuencial AND CLASE_ALTERACION=:xCLASE_ALTERACION AND CLASE_IBI<>''RU'' ';
+		IF (xCLASE_ALTERACION='CONT') THEN
+			vSentencia:=vSentencia||			
+			'AND (i.nif<>p.nif OR i.nombre<>p.nombre OR trim(trim(p.tipo_via_fiscal)||'' ''||trim(p.nombre_via_fiscal)'||
+			'||'' ''||trim(p.primer_numero_fiscal)||'' ''||trim(p.escalera_fiscal)||'' ''||trim(p.planta_fiscal)'||
+			'||'' ''||trim(p.puerta_fiscal))<>trim(trim(i.tipo_via_fiscal)||'' ''||trim(i.nombre_via_fiscal)'||
+			'||'' ''||trim(i.primer_numero_fiscal)||'' ''||trim(i.escalera_fiscal)||'' ''||trim(i.planta_fiscal)'||
+			'||'' ''||trim(i.puerta_fiscal))) ';
+		END IF;
+		
+		--Asignar consulta a cursor, abrirlo y recorrerlo 
+    	OPEN vCURSOR FOR vSENTENCIA USING xMUNICIPIO,xYEAR,xCLASE_ALTERACION;
+    	LOOP
+			FETCH vCURSOR INTO vCOMP;
+   	   EXIT WHEN vCURSOR%NOTFOUND;
+   	   		
+   	   -- para los tipos de variación CONT y EV01
+   	   -- sólo nos interesan las referencias con alguna variación.
+   	   -- para ello consultaremos la tabla REFERENCIAS_BANCOS.
+   	   IF ((xCLASE_ALTERACION='CONT') OR (xCLASE_ALTERACION='EV01')) THEN
+   	   	xCONTINUAR:=FALSE;
+   	   	BEGIN
+   	   		SELECT VARIACION INTO xVARIACION FROM REFERENCIAS_BANCOS 
+   	   		WHERE REF_CATASTRAL=vCOMP.RC_NUM_PARCELA||vCOMP.RC_NUM_SECUENCIAL||vCOMP.RC_PRIMER_CONTROL||
+   	   		vCOMP.RC_SEGUNDO_CONTROL AND MUNICIPIO=xMUNICIPIO;
+   	   		EXCEPTION
+   	   			WHEN NO_DATA_FOUND THEN
+   	   				xVARIACION:='N';
+   	   	END;
+   	   END IF;
+   	   		
+   	   IF ((xVARIACION='S') OR (xCONTINUAR=TRUE)) THEN
+   	   	INSERT INTO TMP_LISTADOS_IBI_COMP(
+					RC_NUM_PARCELA,RC_NUM_SECUENCIAL,RC_PRIMER_CONTROL,RC_SEGUNDO_CONTROL,NIF,
+					NOMBRE,DIRECCION_FISCAL,BD_NIF,BD_NOMBRE,BD_DIRECCION_FISCAL,VALOR_CATASTRAL,
+					BASE_LIQUIDABLE,BD_VALOR_CATASTRAL,BD_BASE_LIQUIDABLE) 
+				VALUES(
+					vCOMP.RC_NUM_PARCELA,vCOMP.RC_NUM_SECUENCIAL,vCOMP.RC_PRIMER_CONTROL,vCOMP.RC_SEGUNDO_CONTROL,
+					vCOMP.NIF,vCOMP.NOMBRE,vCOMP.DIRECCION_FISCAL,vCOMP.BD_NIF,vCOMP.BD_NOMBRE,
+					vCOMP.BD_DIRECCION_FISCAL,vCOMP.VALOR_CATASTRAL,vCOMP.BASE_LIQUIDABLE,vCOMP.BD_VALOR_CATASTRAL,
+					vCOMP.BD_BASE_LIQUIDABLE);
+   	   END IF;   	   		
+   	   		
+   	END LOOP;
+   	CLOSE vCURSOR;
+	END IF;	
+
+END;
+/
+
+/**************************************************************************************************************/
+
+--Procedimiento de selección de información para la impresión de consultas
+--Parámetros:	xMUNICIPIO: código del municipio cuya información se está consultando.
+--					xTIPO_LISTADO: tipo de información que se quiere obtener
+--					Valores para xTIPO_LISTADO: 
+--							1: Altas nuevas con respecto al padrón del año anterior 		
+--							2:	Comparación con la información del año anterior
+--							Si los tipos de variación son CONT o EV01 tendremos que comparar sólo con 
+--							los registros que tuvieron variación (tupla en HIS_CARGOREAL_RUS)
+CREATE OR REPLACE PROCEDURE IMPRIME_LISTADOS_RUS(
+				xMUNICIPIO 			IN	CHAR,
+				xYEAR					IN CHAR,
+				xTIPO_LISTADO 		IN INTEGER,
+				xCLASE_ALTERACION	IN	CHAR)				
+AS
+	TYPE tCURSOR IS REF CURSOR;  -- define REF CURSOR type 
+   vCURSOR    	 	tCURSOR;     -- declare cursor variable 
+   vSentencia		VARCHAR2(2000);
+   vRUS				tmp_padrones_ibi%ROWTYPE;
+   vCOMP				tmp_listados_ibi_comp%ROWTYPE;
+   XID 				INTEGER;
+   xCONTADOR		INTEGER;
+   xVARIACION 		CHAR(1);
+   xCONTINUAR		BOOLEAN DEFAULT TRUE;
+BEGIN
+
+	DELETE FROM TMP_LISTADOS_IBI WHERE USUARIO=USER;
+	DELETE FROM TMP_LISTADOS_IBI_COMP WHERE USUARIO=USER;
+
+	--Asignamos valor a vSentencia teniendo en cuenta el tipo de listado que se quiere obtener
+	IF (xTIPO_LISTADO=1)  THEN   --altas nuevas con respecto al padrón del año anterior
+		vSentencia:='SELECT * FROM TMP_PADRONES_IBI WHERE COD_MUNICIPIO=:xMUNICIPIO AND CLASE_IBI=''RU''';
+	
+		--Asignar consulta a cursor, abrirlo y recorrerlo 
+    	OPEN vCURSOR FOR vSENTENCIA USING xMUNICIPIO;
+    	LOOP
+			FETCH vCURSOR INTO vRUS;
+   	   		EXIT WHEN vCURSOR%NOTFOUND;
+   	   		
+   	   		BEGIN
+   	   			SELECT ID INTO XID 
+   	   			FROM RUS_PARCELAS 
+   	   			WHERE MUNICIPIO=vRUS.COD_MUNICIPIO AND YEAR=vRUS.YEAR_PADRON-1 AND
+   	   				  RC_NUM_PARCELA=vRUS.RC_NUM_PARCELA AND
+   	   				  RC_NUM_SECUENCIAL=vRUS.RC_NUM_SECUENCIAL;
+   	   			EXCEPTION
+   	   				WHEN NO_DATA_FOUND THEN
+
+						INSERT INTO TMP_Listados_IBI (COD_DELEGACION,COD_MUNICIPIO,CLASE_IBI,RC_NUM_PARCELA,
+								RC_NUM_SECUENCIAL,RC_PRIMER_CONTROL,RC_SEGUNDO_CONTROL,RC_NUM_FIJO,IDENTIFICACION_IBI,
+								COD_PROVINCIA,NOMBRE_PROVINCIA,COD_MUNICIPIO_DGC,COD_MUNICIPIO_INE,NOMBRE_MUNICIPIO,
+								NOMBRE_ENTIDAD_MENOR,COD_VIA_PUBLICA,TIPO_VIA,NOMBRE_VIA,PRIMER_NUMERO,PRIMERA_LETRA,
+								SEGUNDO_NUMERO,SEGUNDA_LETRA,KILOMETRO,BLOQUE,ESCALERA,PLANTA,PUERTA,TEXTO_DIRECCION,
+								CODIGO_POSTAL,DISTRITO_MUNICIPAL,COD_MUNICIPIO_AGRAGACION,COD_ZONA,COD_POLIGONO,COD_PARCELA,
+								NOMBRE_PARAJE,YEAR_PADRON,VALOR_CATASTRAL,VC_SUELO,VC_CONSTRUCCION,BASE_LIQUIDABLE,CLAVE_USO,
+								VC_BONIFICADO,CLAVE_BONIFICACION,SUPERFICIE_CONSTRUIDA,SUPERFICIE_SUELO,
+								COEFICIENTE_PROPIEDAD,VALOR_BASE,COD_VALOR_BASE,YEAR_EFECTOS_VC,VC_EFECTOS_IBI,YEAR_REVISION,
+								YEAR_REVISION_PARCIAL,PERIODO_VIGENCIA,COD_DERECHO,NUMERO_TITULARES,TIPO_TITULARES,
+								COMPLEMENTO_TITULARIDAD,NIF,NOMBRE,CLAVE_IDENTIFICACION,COD_PROVINCIA_FISCAL,
+								NOMBRE_PROVINCIA_FISCAL,COD_MUNICIPIO_DGC_FISCAL,COD_MUNICIPIO_INE_FISCAL,
+								NOMBRE_MUNICIPIO_FISCAL,NOMBRE_ENTIDAD_MENOR_FISCAL,COD_VIA_PUBLICA_FISCAL,TIPO_VIA_FISCAL,
+								NOMBRE_VIA_FISCAL,PRIMER_NUMERO_FISCAL,PRIMERA_LETRA_FISCAL,SEGUNDO_NUMERO_FISCAL,
+								SEGUNDA_LETRA_FISCAL,KILOMETRO_FISCAL,BLOQUE_FISCAL,ESCALERA_FISCAL,PLANTA_FISCAL,
+								PUERTA_FISCAL,TEXTO_DIRECCION_FISCAL,CODIGO_POSTAL_FISCAL,APARTADO_CORREOS_FISCAL,     
+								NIF_CONYUGE,NOMBRE_CONYUGE,CLASE_ALTERACION,TIPO_EXPEDIENTE,FECHA_ALTERACION,
+								YEAR_EXPEDIENTE,REFERENCIA_EXPEDIENTE,YEAR_EXPEDIENTE_EC,REFERENCIA_EXPEDIENTE_EC,
+								COD_ENTIDAD_COLABORADORA,CARGADO,F_GRABACION)    
+     					VALUES (vRUS.COD_DELEGACION,vRUS.COD_MUNICIPIO,vRUS.CLASE_IBI,vRUS.RC_NUM_PARCELA,
+     							vRUS.RC_NUM_SECUENCIAL,vRUS.RC_PRIMER_CONTROL,vRUS.RC_SEGUNDO_CONTROL,vRUS.RC_NUM_FIJO,
+     							vRUS.IDENTIFICACION_IBI,vRUS.COD_PROVINCIA,vRUS.NOMBRE_PROVINCIA,vRUS.COD_MUNICIPIO_DGC,
+     							vRUS.COD_MUNICIPIO_INE,vRUS.NOMBRE_MUNICIPIO,vRUS.NOMBRE_ENTIDAD_MENOR,vRUS.COD_VIA_PUBLICA,
+     							vRUS.TIPO_VIA,vRUS.NOMBRE_VIA,vRUS.PRIMER_NUMERO,vRUS.PRIMERA_LETRA,vRUS.SEGUNDO_NUMERO,
+     							vRUS.SEGUNDA_LETRA,vRUS.KILOMETRO,vRUS.BLOQUE,vRUS.ESCALERA,vRUS.PLANTA,vRUS.PUERTA,
+     							vRUS.TEXTO_DIRECCION,vRUS.CODIGO_POSTAL,vRUS.DISTRITO_MUNICIPAL,
+     							vRUS.COD_MUNICIPIO_AGRAGACION,vRUS.COD_ZONA,vRUS.COD_POLIGONO,vRUS.COD_PARCELA,
+     							vRUS.NOMBRE_PARAJE,vRUS.YEAR_PADRON,vRUS.VALOR_CATASTRAL,vRUS.VC_SUELO,vRUS.VC_CONSTRUCCION,
+     							vRUS.BASE_LIQUIDABLE,vRUS.CLAVE_USO,vRUS.VC_BONIFICADO,vRUS.CLAVE_BONIFICACION,
+     							vRUS.SUPERFICIE_CONSTRUIDA,vRUS.SUPERFICIE_SUELO,vRUS.COEFICIENTE_PROPIEDAD,vRUS.VALOR_BASE,
+     							vRUS.COD_VALOR_BASE,vRUS.YEAR_EFECTOS_VC,vRUS.VC_EFECTOS_IBI,vRUS.YEAR_REVISION,
+     							vRUS.YEAR_REVISION_PARCIAL,vRUS.PERIODO_VIGENCIA,vRUS.COD_DERECHO,vRUS.NUMERO_TITULARES,
+     							vRUS.TIPO_TITULARES,vRUS.COMPLEMENTO_TITULARIDAD,vRUS.NIF,vRUS.NOMBRE,
+     							vRUS.CLAVE_IDENTIFICACION,vRUS.COD_PROVINCIA_FISCAL,vRUS.NOMBRE_PROVINCIA_FISCAL,
+     							vRUS.COD_MUNICIPIO_DGC_FISCAL,vRUS.COD_MUNICIPIO_INE_FISCAL,vRUS.NOMBRE_MUNICIPIO_FISCAL,
+     							vRUS.NOMBRE_ENTIDAD_MENOR_FISCAL,vRUS.COD_VIA_PUBLICA_FISCAL,vRUS.TIPO_VIA_FISCAL,
+     							vRUS.NOMBRE_VIA_FISCAL,vRUS.PRIMER_NUMERO_FISCAL,vRUS.PRIMERA_LETRA_FISCAL,
+     							vRUS.SEGUNDO_NUMERO_FISCAL,vRUS.SEGUNDA_LETRA_FISCAL,vRUS.KILOMETRO_FISCAL,
+     							vRUS.BLOQUE_FISCAL,vRUS.ESCALERA_FISCAL,vRUS.PLANTA_FISCAL,vRUS.PUERTA_FISCAL,
+     							vRUS.TEXTO_DIRECCION_FISCAL,vRUS.CODIGO_POSTAL_FISCAL,vRUS.APARTADO_CORREOS_FISCAL,
+     							vRUS.NIF_CONYUGE,vRUS.NOMBRE_CONYUGE,vRUS.CLASE_ALTERACION,vRUS.TIPO_EXPEDIENTE,
+     							vRUS.FECHA_ALTERACION,vRUS.YEAR_EXPEDIENTE,vRUS.REFERENCIA_EXPEDIENTE,
+     							vRUS.YEAR_EXPEDIENTE_EC,vRUS.REFERENCIA_EXPEDIENTE_EC,vRUS.COD_ENTIDAD_COLABORADORA,
+     							vRUS.CARGADO,vRUS.F_GRABACION);   		
+     		END;
+    	END LOOP;
+		CLOSE vCURSOR;
+	
+	ELSIF (xTIPO_LISTADO=2) THEN
+		vSentencia:='SELECT USER,p.rc_num_parcela,p.rc_num_secuencial,p.rc_primer_control,p.rc_segundo_control,p.nif,p.nombre,'||
+			'trim(trim(p.tipo_via_fiscal)||'' ''||trim(p.nombre_via_fiscal)||'' ''||trim(p.primer_numero_fiscal)||'' ''||'||
+			'trim(p.escalera_fiscal)||'' ''||trim(p.planta_fiscal)||'' ''||trim(p.puerta_fiscal)) AS DIRECCION_FISCAL,'||
+			'p.valor_catastral,p.base_liquidable,r.nif AS BD_NIF,r.nombre AS BD_NOMBRE,'||
+			'trim(trim(r.tipo_via_fiscal)||'' ''||trim(r.nombre_via_fiscal)||'' ''||'||
+			'trim(r.primer_numero_fiscal)||'' ''||trim(r.escalera_fiscal)||'' ''||trim(r.planta_fiscal)||'' ''||'||
+			'trim(r.puerta_fiscal)) AS BD_DIRECCION_FISCAL,NULL AS BD_VALOR_CATASTRAL,'||
+			'NULL AS BD_BASE_LIQUIDABLE '||
+			'FROM tmp_padrones_ibi p, rus_titulares r, rus_parcelas a '||
+			'WHERE p.cod_municipio=r.municipio AND r.id=a.abonado and p.cod_municipio=:xMUNICIPIO '|| 
+			'AND p.year_padron=:xYEAR AND r.YEAR=p.year_padron-1 AND p.rc_num_parcela=a.rc_num_parcela AND '||
+			'p.rc_num_secuencial=a.rc_num_secuencial AND p.CLASE_ALTERACION=:xCLASE_ALTERACION AND p.CLASE_IBI=''RU'' ';
+		IF (xCLASE_ALTERACION='CONT') THEN
+			vSentencia:=vSentencia||			
+			'AND (r.nif<>p.nif OR r.nombre<>p.nombre OR trim(trim(p.tipo_via_fiscal)||'' ''||trim(p.nombre_via_fiscal)'||
+			'||'' ''||trim(p.primer_numero_fiscal)||'' ''||trim(p.escalera_fiscal)||'' ''||trim(p.planta_fiscal)'||
+			'||'' ''||trim(p.puerta_fiscal))<>trim(trim(r.tipo_via_fiscal)||'' ''||trim(r.nombre_via_fiscal)'||
+			'||'' ''||trim(r.primer_numero_fiscal)||'' ''||trim(r.escalera_fiscal)||'' ''||trim(r.planta_fiscal)'||
+			'||'' ''||trim(r.puerta_fiscal))) ';
+		END IF;
+		
+		--Asignar consulta a cursor, abrirlo y recorrerlo 
+    	OPEN vCURSOR FOR vSENTENCIA USING xMUNICIPIO,xYEAR,xCLASE_ALTERACION;
+    	LOOP
+			FETCH vCURSOR INTO vCOMP;
+   	   EXIT WHEN vCURSOR%NOTFOUND;   	   
+   	   		
+   	   -- para los tipos de variación CONT y EV01
+   	   -- sólo nos interesan las referencias con alguna variación.
+   	   -- para ello consultaremos la tabla REFERENCIAS_BANCOS.
+   	   IF ((xCLASE_ALTERACION='CONT') OR (xCLASE_ALTERACION='EV01')) THEN
+   	   	xCONTINUAR:=FALSE;   	   	
+   	   	SELECT COUNT(*) INTO xCONTADOR FROM HIS_CARGOREAL_RUS
+   	   	WHERE IDRUSTIT IN 
+   	   		(SELECT R.ID FROM RUS_TITULARES R JOIN RUS_PARCELAS P ON R.ID=P.ABONADO
+					AND P.RC_NUM_PARCELA||P.RC_NUM_SECUENCIAL||P.RC_PRIMER_CONTROL||P.RC_SEGUNDO_CONTROL=
+					vCOMP.RC_NUM_PARCELA||vCOMP.RC_NUM_SECUENCIAL||vCOMP.RC_PRIMER_CONTROL||
+   	   		vCOMP.RC_SEGUNDO_CONTROL AND R.MUNICIPIO=xMUNICIPIO);   	   		
+   	   	IF (xCONTADOR>0) THEN
+   	   		xVARIACION:='S';
+   	   	ELSE
+   	   		xVARIACION:='N';
+   	   	END IF;
+   	   END IF;
+   	   		
+   	   IF ((xVARIACION='S') OR (xCONTINUAR=TRUE)) THEN
+   	   	INSERT INTO TMP_LISTADOS_IBI_COMP(
+					RC_NUM_PARCELA,RC_NUM_SECUENCIAL,RC_PRIMER_CONTROL,RC_SEGUNDO_CONTROL,NIF,
+					NOMBRE,DIRECCION_FISCAL,BD_NIF,BD_NOMBRE,BD_DIRECCION_FISCAL,VALOR_CATASTRAL,
+					BASE_LIQUIDABLE,BD_VALOR_CATASTRAL,BD_BASE_LIQUIDABLE) 
+				VALUES(
+					vCOMP.RC_NUM_PARCELA,vCOMP.RC_NUM_SECUENCIAL,vCOMP.RC_PRIMER_CONTROL,vCOMP.RC_SEGUNDO_CONTROL,
+					vCOMP.NIF,vCOMP.NOMBRE,vCOMP.DIRECCION_FISCAL,vCOMP.BD_NIF,vCOMP.BD_NOMBRE,
+					vCOMP.BD_DIRECCION_FISCAL,vCOMP.VALOR_CATASTRAL,vCOMP.BASE_LIQUIDABLE,vCOMP.BD_VALOR_CATASTRAL,
+					vCOMP.BD_BASE_LIQUIDABLE);
+   	   END IF;   	   		
+   	   		
+   	END LOOP;
+   	CLOSE vCURSOR;
+	END IF;	
+
+END;
+/
+
+/**************************************************************************************************************
+														CREACIÓN DE SINÓNIMOS
+**************************************************************************************************************/
+
+create public synonym TMP_Listados_IBI for .tmp_listados_ibi;
+
+create public synonym TMP_LISTADOS_IBI_COMP for .TMP_LISTADOS_IBI_COMP;
+
+create public synonym imprime_listados_ibi for .imprime_listados_ibi;

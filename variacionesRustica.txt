@@ -1,0 +1,37 @@
+Variaciones en los datos de cinta de Hacienda.
+La clave única para referirnos a una finca rústica será su numero fijo+nif, con lo que la tabla
+REFERENCIAS_BANCOS no nos sirve para saber si ha habido o no una variación, ya que el valor
+que ha podido variar sería el nif y no encontraríamos el registro. Lo que hacemos para saber si
+ha habido o no variación es consultar si hay tuplas en la tabla HIS_CARGOREAL_RUS. 
+Aquí también tenemos el mismo problema, pero se puede solventar:
+     - Si lo que ha cambiado es el nif y en la cinta de hacienda viene el antiguo, podremos
+       saberlo consultando por numero fijo y nif_old en la tabla HIS_CARGOREAL_RUS.
+     - Si el nif no ha cambiado, pues simplemente consultar por numero fijo y nif_new (o nif_old
+       porque en este caso coincidirían).
+     - Tendremos que buscar siempre la más reciente variación.
+
+Una vez que sabemos si los datos han variado o no, si sí se han variado consultaremos los 
+registros del año anterior para conocer qué datos son los válidos y cambiar los que vienen
+en la cinta por estos otros. Ahora tenemos que pensar qué hacer con los datos originales 
+que vienen en la cinta para el año que se está procesando.
+Se me ocurre una posibilidad: Cada año que tratemos que cumpla que los datos en cinta no
+coinciden con los validados (y por lo tanto se presuponen no correctos), incluiremos una tupla
+para este año en la tabla HIS_CARGOREAL_RUS, con lo cual podremos saber qué datos se tendrían
+que haber procesado y qué datos se han procesado realmente, no perdiendo los datos de carga 
+reales. 
+Este proceso se tendrá que hacer siempre que se encuentren variaciones en los datos, pero ¿qué
+hacer cuando estas variaciones ya vengan corregidas en la cinta de hacienda? No tendría 
+sentido salvar ambos datos. Se podría indicar en la tabla HIS_CARGOREAL_RUS si la creación de
+una tupla en esta tabla se debe a petición del usuario (variación manual) o a que se han 
+variado automáticamente durante el proceso de carga (variación automática). 
+Si cuando leemos una cinta encontramos que para la variación más actual ya coinciden los datos
+que se actulizaron con los datos de cinta, el único proceso que tendríamos que realizar sería
+procesar la cinta. 
+Tendríamos que indicar que a partir de cierta variación, ya no se considerase que ha habido
+variación hasta otra posterior manual.
+En la tabla HIS_CARGOREAL_RUS necesitaríamos dos nuevos campos:
+	-TIPO_VARIACION CHAR(1): 'M' manual  'A' automática
+	-ULTIMA_VARIACION CHAR(1): 'N' no 'S' si. Por defecto tomaría 'N' y cuando comprobásemos
+	 que esta es la tupla con la última variación hecha antes de que los datos que vengan
+	 en cinta son los correctos (coinciden con los del año anterior) le pondríamos el valor
+	 'S' para que el año siguiente no tengamos que hacer ningún tipo de comprobación.

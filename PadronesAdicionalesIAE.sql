@@ -1,0 +1,723 @@
+/**************************************************************************************/
+1º.- Cambiar año por 2005 en el fichero de Hacienda.
+
+/**************************************************************************************/
+2º.- Leer el disco.
+
+/**************************************************************************************/
+3º.- Cambiar año en referencias_bancos:
+
+SELECT * FROM REFERENCIAS_BANCOS WHERE YEAR='2005';
+
+UPDATE REFERENCIAS_BANCOS SET YEAR='2003' WHERE YEAR='2005';
+
+/**************************************************************************************/
+4º.- Marcamos de alguna forma estas entradas en el iae y le cambiamos el año:
+
+UPDATE IAE SET PUNTO_KILO_LOCAL='COMPL' WHERE YEAR='2005';
+
+/**************************************************************************************/
+5º.- Recoger domiciliaciones del año 2002
+
+CREATE OR REPLACE PROCEDURE DOMICILIACIONES	
+AS
+
+	xDOMICILIADO 	 CHAR(1);
+    xENTIDAD     	 CHAR(4);
+    xSUCURSAL    	 CHAR(4);
+    xDC          	 CHAR(2);
+    xCUENTA      	 CHAR(10);
+    xF_DOMICILIACION DATE;
+    xDNI_FACTURA 	 CHAR(10);
+    xREPRESENTANTE	 CHAR(10);
+    xIDDOMIALTER	 INTEGER;
+    xCOTITULARES	 CHAR(1);
+
+	CURSOR C1 IS SELECT ID,MUNICIPIO,REFERENCIA FROM IAE WHERE PUNTO_KILO_LOCAL='COMPL';
+	
+BEGIN
+
+	FOR v1 IN C1
+	LOOP
+
+		BEGIN
+       		SELECT DOMICILIADO,ENTIDAD,SUCURSAL,DC,CUENTA,F_DOMICILIACION,DNI_FACTURA,
+			  	   REPRESENTANTE,IDDOMIALTER,COTITULARES
+
+        	INTO xDOMICILIADO, xENTIDAD, xSUCURSAL, xDC, xCUENTA, xF_DOMICILIACION,xDNI_FACTURA,
+			     xREPRESENTANTE,xIDDOMIALTER,xCOTITULARES
+        	FROM IAE
+	  		WHERE MUNICIPIO=v1.MUNICIPIO AND YEAR='2002' AND PERIODO='00' AND REFERENCIA=v1.REFERENCIA;
+		EXCEPTION
+	     	WHEN NO_DATA_FOUND THEN
+	        	xDOMICILIADO:=NULL;
+		END;
+
+		IF (xDOMICILIADO IS NULL) THEN
+			xENTIDAD:=NULL;
+			xDOMICILIADO:='N';
+			xSUCURSAL:=NULL;
+			xDC:=NULL;
+			xCUENTA:=NULL;
+			xF_DOMICILIACION:=NULL;
+			xDNI_FACTURA:=NULL;
+			xREPRESENTANTE:=NULL;
+			xIDDOMIALTER:=NULL;
+			xCOTITULARES:='N';
+		END IF;
+		
+		UPDATE IAE SET DOMICILIADO=xDOMICILIADO,
+					   ENTIDAD=xENTIDAD,
+					   SUCURSAL=xSUCURSAL,
+					   DC=xDC,
+					   CUENTA=xCUENTA,
+					   F_DOMICILIACION=xF_DOMICILIACION,
+					   DNI_FACTURA=xDNI_FACTURA,
+					   REPRESENTANTE=xREPRESENTANTE,
+					   IDDOMIALTER=xIDDOMIALTER,
+					   COTITULARES=xCOTITULARES
+		WHERE ID=v1.ID;
+	
+	END LOOP;
+		
+END;
+/
+
+EXECUTE DOMICILIACIONES;
+DROP PROCEDURE DOMICILIACIONES;
+
+/**************************************************************************************/
+6º.- Corregir nombres de calles (Delphi)
+
+/**************************************************************************************/
+7º.- Modificamos el procedimiento de generación del padrón para que genere recibos y liquidaciones
+	 del padrón 2003 periodo 00 adicional.
+
+CREATE OR REPLACE PROCEDURE GENERA_PADRON_IAE(
+	xMUNICIPIO 	IN CHAR,
+	xYEAR 		IN CHAR,
+	xDESDE 		IN DATE,
+	xHASTA 		IN DATE,
+	xCARGO 		IN DATE,
+	xCONCEPTO 	IN CHAR,
+	xLINEA1 	IN CHAR,
+	xLINEA2 	IN CHAR,
+	xLINEA3 	IN CHAR,
+	xPERIODO 	IN CHAR)
+AS
+     -- domicilio fiscal
+     xDomiFiscal		 varchar(50);
+
+     xCODIGO_POSTAL      CHAR(5);
+     xPOBLACION          varchar2(35);
+     xPROVINCIA          varchar2(35);
+     xProvincia_Tri	 	 varchar2(35);
+     xIndCalleLAfecto	 CHAR(4);
+
+     xINDICE_CALLE       FLOAT;
+     xCUOTA_MINIMA       FLOAT;
+     xCUOTA_BONI         FLOAT;
+     xCOEFI_INCREMENTO   FLOAT;
+     xCUOTA_INCRE        FLOAT;
+     xCUOTA_MUNI         FLOAT;
+     xRECARGO            FLOAT;
+     xCUOTA_MAQUINA      FLOAT;
+     xIMPORTE_MINIMO     FLOAT;
+     xTOTAL              FLOAT;
+     xNOMBRE_TITULAR     VARCHAR(40);
+     xDCONTROL           VARCHAR(2);
+     xDIG_C60_M2         CHAR(2);
+     xREFERENCIA         CHAR(10);
+     xIMPORTE_CAD        CHAR(12);
+     xTEMP               CHAR(1);
+     xCONCEPLiqui        CHAR(6);
+     xANUAL              INTEGER;
+     xRECIBO             INTEGER DEFAULT 0;
+     xPADRON		 	 CHAR(6);
+     xEMISOR 	    	 CHAR(6);
+     xTRIBUTO 	    	 CHAR(3);
+     
+     mYEAR				CHAR(4);
+
+CURSOR CRECIBO IS SELECT * FROM IAE
+		WHERE MUNICIPIO=xMUNICIPIO AND YEAR=xYEAR AND PERIODO=xPERIODO
+							AND EN_PADRON='S' and COD_EXENCION IN (5,6,7);
+BEGIN
+
+	mYEAR:='2003';
+
+   -- Sólo la primera vez
+   SELECT CONCEPTO,LIQUIDACION INTO xPADRON,xCONCEPLiqui FROM PROGRAMAS WHERE PROGRAMA='IAE';
+
+   -- Para ver qué hay que hacer:
+   -- 0  RECIBOS Y LIQUIDACIONES
+   -- 1  SOLO RECIBOS
+   -- 2  SOLO LIQUIDACIONES
+   SELECT IAE_CONF_PERIODOS_TRI INTO xTEMP FROM DATOSPER WHERE MUNICIPIO=xMUNICIPIO;
+
+   --recoger los datos para el cuaderno 60
+   BEGIN
+	select EMISORA,CONCEPTO_BANCO into xEMISOR,xTRIBUTO from RELA_APLI_BANCOS
+			where AYTO=xMUNICIPIO and CONCEPTO=xPADRON;
+   EXCEPTION
+		when no_data_found then
+			BEGIN
+			xEMISOR:='000000';
+			xTRIBUTO:='000';
+			END;
+   END;
+
+   FOR v_TIAE IN CRECIBO
+   LOOP
+
+ 	  xCUOTA_MAQUINA:= v_TIAE.CUOTA_MAQUINA;
+	  xCUOTA_MINIMA:= v_TIAE.IMPORTE_MINIMO;
+
+	  --EL NUMERO DE RECIBO VA A SER EL ID DE LA TABLA DE REFERENCIAS_BANCOS 
+      SELECT ID INTO xRECIBO FROM REFERENCIAS_BANCOS WHERE MUNICIPIO=xMUNICIPIO
+			AND YEAR=mYEAR AND PERIODO=xPERIODO AND REFERENCIA_IAE=v_TIAE.REFERENCIA;
+			
+	
+      IF (v_TIAE.DOMICILIADO='N') THEN
+          xNOMBRE_TITULAR:=NULL;
+      ELSE
+	    --nombre del titular de la cuenta, para el cuaderno 19 
+         SELECT NOMBRE INTO xNOMBRE_TITULAR FROM CONTRIBUYENTES WHERE NIF=v_TIAE.DNI_FACTURA;
+      END IF;
+
+
+	  xDomiFiscal:=v_TIAE.VIA||' '||v_TIAE.CALLE||' '||v_TIAE.NUMERO||' '||
+			v_TIAE.LETRA||' '||v_TIAE.ESCALERA||' '||v_TIAE.PISO||' '||v_TIAE.PUERTA;
+
+	  BEGIN
+		--buscamos la provincia del codigo postal de la actividad
+        IF RTRIM(v_TIAE.CALLE_LOCAL) IS NULL THEN
+		  SELECT PROVINCIA INTO xProvincia_Tri FROM COD_PROVINCIAS
+		  WHERE CODPROV=SUBSTR(v_TIAE.COD_POSTAL_ACTIVI,1,2);
+		ELSE
+		   SELECT PROVINCIA INTO xProvincia_Tri FROM COD_PROVINCIAS
+		   WHERE CODPROV=SUBSTR(v_TIAE.COD_POSTAL_LOCAL,1,2);
+		END IF;
+	  EXCEPTION
+		 when no_data_found then
+			xProvincia_Tri:=NULL;
+	  END;
+	  	  
+
+	  --domicilio fiscal en funcion de si tiene un representante o no.
+	  --Dentro de la funcion "GetDomicilioFiscal" se comprueba si tiene a su vez
+	  --un domicilio alternativo.
+	  IF v_TIAE.REPRESENTANTE IS NULL THEN
+
+		 --En el IAE hay una variante ya que si no tiene representante y tampoco
+		 --domicilios alternativos entonces se tiene que coger los datos de la propia
+		 --tabla de IAE y no de contribuyentes.
+		 IF v_TIAE.IDDOMIALTER IS NULL THEN
+			--xDomiFiscal ya estaria con datos
+			xPoblacion:=v_TIAE.MUNICIPIO_FISCAL;
+			xCODIGO_POSTAL:=v_TIAE.CODIGO_POSTAL;
+
+			BEGIN
+				SELECT PROVINCIA INTO xProvincia FROM COD_PROVINCIAS
+					WHERE CODPROV=SUBSTR(v_TIAE.CODIGO_POSTAL,1,2);
+			EXCEPTION
+				when no_data_found then
+					xProvincia:=NULL;
+			END;
+		 ELSE
+			GetDomicilioFiscal(v_TIAE.NIF,v_TIAE.IDDOMIALTER,
+					xDomiFiscal,xPoblacion,xProvincia,xCODIGO_POSTAL);
+		 END IF;
+  	  ELSE
+		 GetDomicilioFiscal(v_TIAE.REPRESENTANTE,v_TIAE.IDDOMIALTER,
+				xDomiFiscal,xPoblacion,xProvincia,xCODIGO_POSTAL);
+	  END IF;
+	  	  
+
+      -- inicializamos valores
+      xCUOTA_INCRE:=0;
+      xRECARGO:=0;
+      xIMPORTE_MINIMO:=0;
+      xANUAL:=0;
+
+      --Calculamos indice diferenciando si tiene calle local afecto o en su defecto calle actividad
+      IF RTRIM(v_TIAE.CALLE_LOCAL) IS NULL THEN
+         -- Vemos el índice de situación de la calle, y el coeficiente de incremento y recargo
+         CALCULA_INDICE_CALLE(xMUNICIPIO, mYEAR, v_TIAE.CODIGO_VIA, v_TIAE.NUMERO_ACTIVI,
+	   			              xINDICE_CALLE, xCOEFI_INCREMENTO, xRECARGO);
+      ELSE
+         BEGIN
+		    --Buscamos codigo de la calle 
+		    SELECT CODIGO_CALLE INTO xIndCalleLAfecto FROM CALLES 
+			WHERE RTRIM(CALLE)=RTRIM(v_TIAE.CALLE_LOCAL) AND ROWNUM=1;
+	     EXCEPTION
+		    when no_data_found then
+			   xIndCalleLAfecto:=NULL;
+	     END;
+	         
+         -- Vemos el índice de situación de la calle, y el coeficiente de incremento y recargo
+         CALCULA_INDICE_CALLE(xMUNICIPIO, mYEAR, xIndCalleLAfecto, v_TIAE.NUMERO_LOCAL,
+	   			              xINDICE_CALLE, xCOEFI_INCREMENTO, xRECARGO);
+	  END IF;
+	  
+	  
+      IF xINDICE_CALLE IS NULL THEN
+     	  xINDICE_CALLE:=1;  -- Valor por defecto del índice de calle
+      END IF;
+
+      -- Se busca en los epígrafes de sólo cálculo anual
+      SELECT COUNT(*) INTO xANUAL FROM IAE_EPIGRAFE
+			WHERE EPIGRAFE=v_TIAE.EPIGRAFE AND SECCION=v_TIAE.SECCION;
+
+      -- Epígrafes con W en el campo tipo de operación sólo liquidación anual según Salobreña.
+      -- Si el Epígrafe está entonces se hace cálculo anual siempre
+
+      IF (v_TIAE.TIPO_REGISTRO='S' OR xANUAL>0) THEN
+    	   xANUAL:=1;
+    	   xIMPORTE_MINIMO:=xCUOTA_MINIMA;
+      END IF;
+
+	-- Si se ha dado de baja debemos comprobar hasta que trimestre
+      --  del año en el que se da de baja la actividad se ha de pagar
+      IF v_TIAE.F_BAJA IS NOT NULL THEN
+
+         COMPRUEBA_BAJA(xPERIODO,
+				v_TIAE.F_BAJA,
+				v_TIAE.FECHA_INICIO_ACTI,
+				xIMPORTE_MINIMO,
+				xCUOTA_MINIMA,
+				xCUOTA_MAQUINA);
+
+      ELSE  -- No se ha dado de baja
+
+        IF (xANUAL=0) THEN -- si no es anual calculamos los importes según periodos
+           IF (xPERIODO='01' OR xPERIODO='00') THEN
+              xIMPORTE_MINIMO:=xCUOTA_MINIMA;
+           ELSIF (xPERIODO='02') THEN
+	        xIMPORTE_MINIMO:=(xCUOTA_MINIMA*3)/4;
+	        xCUOTA_MAQUINA:=(xCUOTA_MAQUINA*3)/4;
+           ELSIF (xPERIODO='03') THEN
+              xIMPORTE_MINIMO:=xCUOTA_MINIMA/2;
+ 	        xCUOTA_MAQUINA:=xCUOTA_MAQUINA/2;
+           ELSIF (xPERIODO='04') THEN
+	        xIMPORTE_MINIMO:=xCUOTA_MINIMA/4;
+   	        xCUOTA_MAQUINA:=xCUOTA_MAQUINA/4;
+	     END IF;
+        END IF;
+      END IF;
+      
+      
+      -- Se aplica bonificación, si procede
+      IAE_BONIFICACION(0,v_TIAE.FECHA_LIMITE_BENE,
+	  	xIMPORTE_MINIMO,xCUOTA_MAQUINA,xCUOTA_BONI);
+				
+	
+	  xIMPORTE_MINIMO:=Round(xIMPORTE_MINIMO,2);
+	  xCUOTA_MAQUINA:=Round(xCUOTA_MAQUINA,2);
+	  xCUOTA_BONI:=Round(xCUOTA_BONI,2);
+
+	  -- Cuota incrementada: cuota de tarifa con maquina * coeficiente de incremento
+      xCUOTA_INCRE:=Round((xCUOTA_BONI * v_TIAE.COEF_PONDERACION),2);
+
+	  --Cuota municipal:
+      --(Cuota tarifa sin maquina * coeficiente de ponderacion) * indice de situacion +
+      --cuota maquina * coeficiente de ponderacion
+	  xCUOTA_MUNI:=Round((((xCUOTA_BONI-xCUOTA_MAQUINA) * v_TIAE.COEF_PONDERACION) * 
+	             xINDICE_CALLE + (xCUOTA_MAQUINA * v_TIAE.COEF_PONDERACION)),2);
+
+	  -- Recargo 40%: la cuota tarifa que ya tiene la cuota maquina incluida * 40%
+	  xRECARGO:=Round(((xCUOTA_BONI * v_TIAE.COEF_PONDERACION) * xRECARGO * 0.01),2);
+
+	  -- Total a pagar
+      xTOTAL:=Round((xRECARGO+ xCUOTA_MUNI),2);
+
+	  -- Cálculo de los dígitos de control para la Emisora
+      CALCULA_DC_60(xTotal,xRECIBO,xTRIBUTO,SUBSTR(mYear,3,2),xPeriodo,xEMISOR,xDCONTROL);
+
+	  --calcular los digitos de control del cuaderno 60 modalidad 2
+	  CALCULA_DC_MODALIDAD2_60(xTotal, xRECIBO, xTRIBUTO, SUBSTR(mYear,3,2), '1',
+			to_char(xHASTA,'y'), to_char(xHASTA,'ddd'), xEMISOR, xDIG_C60_M2);
+
+      -- Convierte el número de recibo a carácteres y rellena de ceros
+      GETREFERENCIA(xRECIBO,xREFERENCIA);
+
+      -- Importe a pagar expresado en caracteres
+      IMPORTEENCADENA(xTotal,xIMPORTE_CAD);
+      
+      
+	  --insertamos los cotitulares del recibo
+	  IF v_TIAE.COTITULARES='S' THEN
+		INSERT INTO COTITULARES_RECIBO(NIF,PROGRAMA,AYTO,PADRON,YEAR,PERIODO,RECIBO)
+		SELECT NIF,'IAE',xMUNICIPIO,xPADRON,mYEAR,xPERIODO,xRECIBO
+		FROM COTITULARES
+		WHERE ID_CONCEPTO=v_TIAE.ID AND PROGRAMA='IAE';
+	  END IF;
+
+      IF (xTEMP='0' OR xTEMP='1' OR xPERIODO='00') THEN
+		if xTOTAL>0 then
+ 		   INSERT INTO RECIBOS_IAE (Recibo,ABONADO,REFE,YEAR,PERIODO,MUNICIPIO,
+ 			 NIF,NOMBRE,DOMICILIO,CODIGO_POSTAL,POBLACION,PROVINCIA,
+			 --DOM. TRIBUTARIO
+			 CODIGO_VIA,CALLE,ESCALERA,PLANTA,PUERTA,NUMERO,
+			 CODPOSTAL_TRI,POBLACION_TRI,PROVINCIA_TRI,
+			 ID_EPIGRAFE,EPIGRAFE,SECCION,
+			 CUOTA_PERIODO,PORCENT_BENE,CUOTA_MINIMA,
+             CUOTA_BONI,CUOTA_INCRE,CUOTA_MUNI,RECARGO,CUOTA_MAQUINA,
+			 TIPO_MUNICIPIO,SUPERFICIE_DECLARADA,SUPERFICIE_RECTIFICADA,
+			 SUPERFICIE_COMPUTABLE,YEAR_INICIO,FECHA_LIMITE,TIPO_ACTIVIDAD,IMPORTE,TOTAL,
+			 DOMICILIADO,ESTADO_BANCO,
+			 ENTIDAD,SUCURSAL,DC,CUENTA,F_DOMICILIACION,TITULAR,NOMBRE_TITULAR,
+			 DESDE,HASTA,F_CARGO,CONCEPTO,LINEA1,LINEA2,LINEA3,EMISOR,TRIBUTO,EJERCICIO,
+			 REMESA,REFERENCIA,DIGITO_CONTROL,
+			 DISCRI_PERIODO,DIGITO_YEAR,F_JULIANA,DIGITO_C60_MODALIDAD2)
+      	   VALUES
+             (xRecibo,v_TIAE.ID,v_TIAE.REFERENCIA,mYear,xPeriodo,xMUNICIPIO,
+			  v_TIAE.NIF,v_TIAE.NOMBRE,xDomiFiscal,xCODIGO_POSTAL,xPOBLACION,xPROVINCIA,
+			  --DOM. TRIBUTARIO
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.CODIGO_VIA,xIndCalleLAfecto),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.CALLE_ACTIVIDAD,v_TIAE.CALLE_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.ESCALERA_ACTIVI,v_TIAE.ESCALERA_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.PISO_ACTIVI,v_TIAE.PISO_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.PUERTA_ACTIVI,v_TIAE.PUERTA_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.NUMERO_ACTIVI,v_TIAE.NUMERO_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.COD_POSTAL_ACTIVI,v_TIAE.COD_POSTAL_LOCAL),
+              DECODE(RTRIM(v_TIAE.CALLE_LOCAL),NULL,v_TIAE.MUNICIPIO_ACTIVI,v_TIAE.MUNICIPIO_LOCAL),
+			  xProvincia_Tri,v_TIAE.ID_EPIGRAFE,v_TIAE.EPIGRAFE,v_TIAE.SECCION,
+			  xIMPORTE_MINIMO,TO_NUMBER(v_TIAE.BENEFICIOS_PORCEN),xCUOTA_MINIMA,
+			  xCUOTA_BONI,xCUOTA_INCRE,xCUOTA_MUNI,xRECARGO,xCUOTA_MAQUINA,
+			  xINDICE_CALLE,v_TIAE.SUPERFICIE_DECLARADA,v_TIAE.SUPERFICIE_RECTIFICADA,
+              v_TIAE.SUPERFICIE_COMPUTABLE,v_TIAE.YEAR_INICIO_ACTI,
+			  v_TIAE.FECHA_LIMITE_BENE,v_TIAE.TIPO_ACTIVIDAD,xIMPORTE_CAD,xTOTAL,
+			  v_TIAE.DOMICILIADO,DECODE(v_TIAE.DOMICILIADO,'S','EB',NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.ENTIDAD,NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.SUCURSAL,NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.DC,NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.CUENTA,NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.F_DOMICILIACION,NULL),
+			  DECODE(v_TIAE.DOMICILIADO,'S',v_TIAE.DNI_FACTURA,NULL),
+              xNOMBRE_TITULAR,xDESDE,xHASTA,xCARGO,xCONCEPTO,
+     		  xLINEA1,xLINEA2,xLINEA3,xEMISOR,xTRIBUTO,SUBSTR(mYear,3,2),xPeriodo,
+			  xREFERENCIA,xDCONTROL,'1',to_char(xHASTA,'y'), to_char(xHASTA,'ddd'),xDIG_C60_M2);
+		 end if;
+
+	  END IF;
+
+  
+	  
+	  --Generamos liquidación (aunque el periodo expresado sea el 00
+      --IF (xTEMP='0' OR xTEMP='2') AND (xPERIODO<>'00') THEN        
+		if xTOTAL>0 then
+          IF RTRIM(v_TIAE.CALLE_LOCAL) IS NULL THEN
+			 IAE_GENERA_LIQUIDACIONES
+			    (xMUNICIPIO,v_TIAE.NIF,v_TIAE.CALLE_ACTIVIDAD,v_TIAE.ESCALERA_ACTIVI,
+			     v_TIAE.PISO_ACTIVI,v_TIAE.PUERTA_ACTIVI,v_TIAE.NUMERO_ACTIVI,mYEAR,xPERIODO,
+			     v_TIAE.REFERENCIA,v_TIAE.EPIGRAFE,v_TIAE.SECCION,v_TIAE.TIPO_ACTIVIDAD,
+	             xCUOTA_MINIMA,xIMPORTE_MINIMO,TO_NUMBER(v_TIAE.BENEFICIOS_PORCEN),
+			     xCUOTA_BONI,xCUOTA_INCRE,xCUOTA_MUNI,xRECARGO,xCUOTA_MAQUINA,
+	             xTOTAL,xRECIBO,xCONCEPLIQUI,v_TIAE.CANTIDAD_ELEMENTO_1);
+		  ELSE
+			 IAE_GENERA_LIQUIDACIONES
+			    (xMUNICIPIO,v_TIAE.NIF,v_TIAE.CALLE_LOCAL,v_TIAE.ESCALERA_LOCAL,
+			     v_TIAE.PISO_LOCAL,v_TIAE.PUERTA_LOCAL,v_TIAE.NUMERO_LOCAL,mYEAR,xPERIODO,
+			     v_TIAE.REFERENCIA,v_TIAE.EPIGRAFE,v_TIAE.SECCION,v_TIAE.TIPO_ACTIVIDAD,
+	             xCUOTA_MINIMA,xIMPORTE_MINIMO,TO_NUMBER(v_TIAE.BENEFICIOS_PORCEN),
+			     xCUOTA_BONI,xCUOTA_INCRE,xCUOTA_MUNI,xRECARGO,xCUOTA_MAQUINA,
+	             xTOTAL,xRECIBO,xCONCEPLIQUI,v_TIAE.CANTIDAD_ELEMENTO_1);
+		  END IF;
+		end if;
+	  --END IF;
+	  
+	  
+   END LOOP;
+
+   -- Insertamos una tupla en LOGSPADRONES para controlar que esta acción ha sido ejecutada
+   INSERT INTO LOGSPADRONES (MUNICIPIO,PROGRAMA,PYEAR,PERIODO,HECHO)
+   VALUES (xMUNICIPIO,'IAE',mYEAR,xPERIODO,'Se Genera un Padrón Complementario');
+
+END;
+/
+
+
+/**************************************************************************************/
+8º.- Después de generar el padrón desde la aplicación (indicando año 2005) actualizamos 
+de nuevo el procedimiento GENERA_PADRON_IAE.
+
+/**************************************************************************************/
+9º.- Quitamos una de las marcas identificativas del padrón complementario (año)
+dejamos PUNTO_KILO_LOCAL
+
+UPDATE IAE SET YEAR='2003' WHERE YEAR='2005';
+
+/**************************************************************************************/
+10º.- Cambio del proceso para la impresión de liquidaciones.   86986-88066
+	
+CREATE OR REPLACE PROCEDURE ImprimeLiquiIAE(
+			xYEAR 	IN CHAR,
+			xPERI	IN CHAR,
+			xMUNI	IN CHAR,
+			xDESDE 	IN INTEGER,
+			xHASTA 	IN INTEGER)
+AS
+
+	-- Datos de la liquidacion
+	xCONCEPTO				CHAR(6);
+	xNUMERO					CHAR(7);
+	xNIF	 				CHAR(10);
+	xNIFREP					CHAR(10);
+	xDOMI_TRIBUTARIO		VARCHAR(60);
+	xF_LIQUIDACION			DATE;
+	xF_FIN_PE_VOL			DATE;
+	xMOTIVO					VARCHAR(1024);
+	xEMISOR					CHAR(6);
+
+	xTRIBUTO 				CHAR(3);
+	xEJER_C60 				CHAR(2);
+	xREFERENCIA				CHAR(10);
+	xDISCRI_PERIODO			CHAR(1);
+	xDIGITO_YEAR 			CHAR(1);
+	xF_JULIANA 				CHAR(3);
+	xDIGITO_C60_MODALIDAD2 	CHAR(2);
+
+	xCUOTA_INCREMENTADA 	FLOAT DEFAULT 0;
+	xRECARGO_PROVINCIAL		FLOAT DEFAULT 0;
+	xINDICE					FLOAT DEFAULT 0;
+	xSUPERFICIE_DECLARADA	FLOAT DEFAULT 0;
+	xSUPERFICIE_RECTIFICADA	FLOAT DEFAULT 0;
+	xSUPERFICIE_COMPUTABLE	FLOAT DEFAULT 0;
+	xYEAR_INICIO			CHAR(4);
+	xFECHA_LIMITE			DATE;
+
+	-- Datos del representante
+	xNIFREPRE				CHAR(10);
+	xNOMBREREPRE			VARCHAR(40);
+	xDOMIREPRE				VARCHAR(200);
+	xPOBLAREPRE				VARCHAR(200);
+
+	xNOMBRE_EPIGRAFE		VARCHAR2(50); -- Epigrafes.
+	xPadron					char(6);
+	xTipo_Actividad   		char(12);
+	
+	xCOEF_PONDERACION		FLOAT;
+	xFECHA_INICIO_ACTI		DATE;
+
+	cursor cRecIAE is SELECT * FROM RECIBOS_IAE
+			WHERE MUNICIPIO=xMuni AND YEAR=xYear AND PERIODO=xPeri
+			AND RECIBO BETWEEN xDESDE AND xHASTA AND RECIBO IN (
+			SELECT NUMERO FROM LIQUIDACIONES WHERE YEAR='2003' AND PERIODO='00'
+			AND USUARIO='TORREJON');
+BEGIN
+
+
+   SELECT LIQUIDACION INTO xPADRON FROM PROGRAMAS WHERE PROGRAMA='IAE';
+
+   DELETE FROM TMP_IAE_LIQUIDACIONES WHERE USUARIO=USER;
+
+   FOR vRec in cRecIAE LOOP
+
+
+	-- Datos que se toman de la tabla de LIQUIDACIONES
+	SELECT CONCEPTO,NUMERO,EMISOR,TRIBUTO,EJER_C60,REFERENCIA,DISCRI_PERIODO,DIGITO_YEAR,
+		F_JULIANA,DIGITO_C60_MODALIDAD2,NIF,NIFREP,
+		DOMI_TRIBUTARIO,F_LIQUIDACION,F_FIN_PE_VOL,MOTIVO
+	INTO
+		xCONCEPTO,xNUMERO,xEMISOR,xTRIBUTO,xEJER_C60,xREFERENCIA,xDISCRI_PERIODO,
+		xDIGITO_YEAR,xF_JULIANA,xDIGITO_C60_MODALIDAD2,xNIF,xNIFREP,
+		xDOMI_TRIBUTARIO,xF_LIQUIDACION,xF_FIN_PE_VOL,xMOTIVO
+	FROM LIQUIDACIONES
+	WHERE MUNICIPIO=vRec.MUNICIPIO AND CONCEPTO=xPADRON AND YEAR=vRec.YEAR
+		AND PERIODO=vRec.PERIODO
+		AND TO_NUMBER(NUMERO)=vRec.RECIBO;
+
+	-- Datos del representante (se toman de la tabla de CONTRIBUYENTES)
+	IF xNIFREP IS NULL THEN -- Los datos del representante son los del titular del recibo.
+	   xNIFREPRE:=xNIF;
+	   xNOMBREREPRE:=vREc.NOMBRE;
+	   xDOMIREPRE:=vREc.DOMICILIO;
+	   xPOBLAREPRE:=rtrim(vREc.CODIGO_POSTAL)||' '||rtrim(vREc.POBLACION)||' '
+				||rtrim(vREc.PROVINCIA);
+
+	ELSE -- Hay representante, se buscan sus datos fiscales
+	   xNIFREPRE:=xNIFREP;
+
+	   SELECT GETNOMBRE(xNIFREP),GETDOMICILIO(xNIFREP),GETCPPOBLAPROVI(NIF)
+	   INTO xNOMBREREPRE,xDOMIREPRE,xPOBLAREPRE
+  	   FROM CONTRIBUYENTES WHERE NIF=xNIFREP;
+	END IF;
+
+	-- Datos que se toman de la tabla CUOTAS_IAE
+	CALCULA_INDICE_CALLE(xMUNI,xYEAR,vRec.CODIGO_VIA,vRec.NUMERO,
+		xINDICE,xCuota_Incrementada,xRecargo_Provincial);
+
+	-- Datos que se toman de la tabla EPIGRAFE
+	begin
+		SELECT NOMBRE INTO xNOMBRE_EPIGRAFE FROM EPIGRAFE WHERE ID=vRec.ID_EPIGRAFE;
+	exception
+		when no_data_found then
+			xNOMBRE_EPIGRAFE:=null;
+	end;
+
+	IF vRec.TIPO_ACTIVIDAD='E' THEN
+	   xTipo_Actividad:='EMPRESARIAL';
+	ELSIF vRec.TIPO_ACTIVIDAD='P' THEN
+	   xTipo_Actividad:='PROFESIONAL';
+	ELSIF vRec.TIPO_ACTIVIDAD='A' THEN
+	   xTipo_Actividad:='ARTISTICA';
+	END IF;
+	
+	SELECT COEF_PONDERACION,FECHA_INICIO_ACTI
+	INTO xCOEF_PONDERACION,xFECHA_INICIO_ACTI
+	FROM IAE WHERE ID=vRec.ABONADO;
+
+	INSERT INTO TMP_IAE_LIQUIDACIONES(
+		MUNICIPIO,CONCEPTO,YEAR,PERIODO,NUMERO,NIF,
+		NOMBRE,DOMICILIO,POBLACION,PROVINCIA,CODIGO_POSTAL,
+		NOMBREREPRE,DOMIREPRE,POBLAREPRE,DOMI_TRIBUTARIO,
+		F_LIQUIDACION,F_FIN_PE_VOL,MOTIVO,EMISOR,TRIBUTO,EJER_C60,REFERENCIA,
+		DISCRI_PERIODO,DIGITO_YEAR,F_JULIANA,DIGITO_C60_MODALIDAD2,CODIGO_BARRAS,
+		DESCRIPCION,NOMBRE_EPIGRAFE,
+		EPIGRAFE,SECCION,TIPO_ACTIVIDAD,
+		SUPERFICIE_DECLARADA,SUPERFICIE_RECTIFICADA,SUPERFICIE_COMPUTABLE,
+		YEAR_INICIO,FECHA_LIMITE,
+		REFE,	CUOTA_PERIODO,PORCENT_BENE,CUOTA_MINIMA,CUOTA_BONI,
+		CUOTA_INCRE,CUOTA_MUNI,RECARGO,COEF_PONDERACION,FECHA_INICIO_ACTI,CUOTA_MAQUINA,TOTAL,
+		INDICE, CUOTA_INCREMENTADA, RECARGO_PROVINCIAL)
+
+
+	VALUES(
+		vRec.MUNICIPIO,xCONCEPTO,vRec.YEAR,vRec.PERIODO,xNUMERO,xNIF,
+		vRec.NOMBRE, vRec.DOMICILIO, vRec.POBLACION, vRec.PROVINCIA, vRec.CODIGO_POSTAL,
+		xNOMBREREPRE,xDOMIREPRE,xPOBLAREPRE,xDOMI_TRIBUTARIO,
+		xF_LIQUIDACION,xF_FIN_PE_VOL,xMOTIVO,xEMISOR,xTRIBUTO,xEJER_C60,xREFERENCIA,
+		xDISCRI_PERIODO,xDIGITO_YEAR,xF_JULIANA,xDIGITO_C60_MODALIDAD2,
+		
+		'90521'||xEMISOR||xREFERENCIA||
+		xDIGITO_C60_MODALIDAD2||xDISCRI_PERIODO||
+		xTRIBUTO||xEJER_C60||xDIGITO_YEAR||
+		xF_JULIANA||LPAD(vRec.TOTAL*100,8,'0') ||'0',  			 
+		
+		vRec.CONCEPTO,xNOMBRE_EPIGRAFE,
+		vRec.EPIGRAFE,vRec.SECCION,xTIPO_ACTIVIDAD,
+		vRec.SUPERFICIE_DECLARADA,vRec.SUPERFICIE_RECTIFICADA,vRec.SUPERFICIE_COMPUTABLE,
+		vRec.YEAR_INICIO,vRec.FECHA_LIMITE,
+		vRec.REFE,vRec.CUOTA_PERIODO,vRec.PORCENT_BENE,vRec.CUOTA_MINIMA,vRec.CUOTA_BONI,
+		vRec.CUOTA_INCRE,vRec.CUOTA_MUNI,vRec.RECARGO,xCOEF_PONDERACION,xFECHA_INICIO_ACTI,
+		vRec.CUOTA_MAQUINA,vRec.TOTAL,
+		xINDICE, xCUOTA_INCREMENTADA, xRECARGO_PROVINCIAL);
+
+   END LOOP;
+
+end;
+/
+/**************************************************************************************/
+10º.- Pase de un nuevo cargo a recaudación
+CREATE OR REPLACE PROCEDURE IAE_PASE_RECA(
+               xMUNICIPIO 		IN VARCHAR2,
+               xYEAR 	  		IN CHAR,
+               xPERIODO   		IN CHAR,
+               xFECHA 	  		IN DATE,
+               xN_CARGO   		IN CHAR,
+		   xYEARCONTRAIDO		IN CHAR,
+		   xEXENTOS			IN CHAR)
+AS
+    xPADRON             CHAR(6);
+    DOMICILIO_TRIBUTARIO VARCHAR(60);
+    OBJETO_TRIBUTARIO 	VARCHAR(1024);
+    xSALTO      	      CHAR(2);
+    xNOM_EPI    	      VARCHAR(50);
+    xTIPO_TRIBUTO	 	CHAR(2);
+
+CURSOR CRECIBOS IS  SELECT * FROM RECIBOS_IAE
+	WHERE MUNICIPIO='148' AND YEAR='2003' AND PERIODO='00' AND ABONADO IN (
+	SELECT ID FROM IAE WHERE PUNTO_KILO_LOCAL='COMPL');
+BEGIN
+
+     SELECT CONCEPTO INTO xPADRON FROM PROGRAMAS WHERE PROGRAMA='IAE';
+
+     SELECT TIPO_TRIBUTO INTO xTIPO_TRIBUTO
+     FROM CONTADOR_CONCEPTOS
+     WHERE MUNICIPIO=xMUNICIPIO AND CONCEPTO=xPADRON;
+
+     SELECT min(SALTO) INTO xSALTO FROM SALTO;
+
+     FOR v_RECIBOS IN CRECIBOS
+     LOOP
+
+        DOMICILIO_TRIBUTARIO:=v_RECIBOS.CALLE || ' ' ||v_RECIBOS.NUMERO
+				||' '||v_RECIBOS.ESCALERA||' '|| v_RECIBOS.PLANTA
+				||' ' ||v_RECIBOS.PUERTA||' '||SUBSTR(v_RECIBOS.POBLACION_TRI,1,18);
+
+
+	  /* Obtenemos la descripción del epigrafe */
+        begin
+ 	     SELECT NOMBRE INTO xNOM_EPI FROM EPIGRAFE WHERE ID=v_RECIBOS.ID_EPIGRAFE;
+	     Exception
+		  When no_data_found then
+		     xNOM_EPI:='';
+        end;
+
+        OBJETO_TRIBUTARIO:='';
+        OBJETO_TRIBUTARIO:='REFERENCIA: '||v_RECIBOS.REFE||xSALTO;
+
+        IF DOMICILIO_TRIBUTARIO IS NOT NULL THEN
+      	  OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO||'DOM.TRIBUTARIO: '||DOMICILIO_TRIBUTARIO||xSALTO;
+        END IF;
+
+        IF xNOM_EPI IS NOT NULL THEN
+            OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO||'EPIGRAFE: '||xNOM_EPI||xSALTO;
+        END IF;
+
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA MINIMA: ' ||TO_CHAR(v_RECIBOS.CUOTA_MINIMA)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'%BONIFICACIÓN: ' ||TO_CHAR(v_RECIBOS.PORCENT_BENE)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA PERIODO: ' ||TO_CHAR(v_RECIBOS.CUOTA_PERIODO)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA BONIFI: ' ||TO_CHAR(v_RECIBOS.CUOTA_BONI)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA INCREM.: '||TO_CHAR(v_RECIBOS.CUOTA_INCRE)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA MUNICIPAL: '||TO_CHAR(v_RECIBOS.CUOTA_MUNI)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'RECARGO: '||TO_CHAR(v_RECIBOS.RECARGO)||xSALTO;
+        OBJETO_TRIBUTARIO:=OBJETO_TRIBUTARIO ||
+		'CUOTA MAQUINA: '||TO_CHAR(v_RECIBOS.CUOTA_MAQUINA)||xSALTO;
+
+	  IF NOT (xEXENTOS='N' AND v_RECIBOS.TOTAL<=0) THEN
+  	     INSERT INTO PUNTEO
+              (AYTO, PADRON, YEAR, PERIODO, RECIBO, NIF,
+               NOMBRE, VOL_EJE, F_CARGO, N_CARGO,
+               PRINCIPAL, CUOTA_INICIAL, RECARGO_O_E,
+		   IMPORTE1, IMPORTE2, IMPORTE3, IMPORTE4,
+		   TITULO1, TITULO2, TITULO3, TITULO4, DOM_TRIBUTARIO,
+               FIN_PE_VOL, INI_PE_VOL, TIPO_DE_TRIBUTO,
+               OBJETO_TRIBUTARIO, ESTADO_BANCO,
+               TIPO_DE_OBJETO, CLAVE_CONCEPTO, YEAR_CONTRAIDO)
+           VALUES
+              (xMUNICIPIO, xPADRON, xYEAR, xPERIODO,
+               v_RECIBOS.RECIBO, v_RECIBOS.NIF, v_RECIBOS.NOMBRE, 'V',
+               xFECHA, xN_CARGO, v_RECIBOS.TOTAL, v_RECIBOS.TOTAL,v_RECIBOS.RECARGO,
+
+               v_RECIBOS.CUOTA_MINIMA,v_RECIBOS.CUOTA_BONI,
+               v_RECIBOS.CUOTA_MUNI,v_RECIBOS.RECARGO,
+		       'CUOTA MINIMA', 'CUOTA BONIFICADA', 'CUOTA MUNICIPAL', 'RECARGO PROVINCIAL',
+
+               DOMICILIO_TRIBUTARIO, v_RECIBOS.HASTA,
+               v_RECIBOS.DESDE, xTIPO_TRIBUTO, OBJETO_TRIBUTARIO,
+               v_RECIBOS.ESTADO_BANCO, 'R', v_RECIBOS.REFE, xYEARCONTRAIDO);
+	  END IF;
+
+     END LOOP;
+
+     -- Insertamos una tupla en LOGSPADRONES para controlar que esta acción ha sido ejecutada
+     INSERT INTO LOGSPADRONES (MUNICIPIO,PROGRAMA,PYEAR,PERIODO,HECHO)
+     VALUES (xMUNICIPIO,'IAE',xYEAR,xPERIODO,'Se Pasa un padrón complementario a Recaudación');
+
+END;
+/
+
+/**************************************************************************************/
+8º.- Después de pasar el cargo a recaudación, cargar de nuevo el procedimiento IAE_PASE_RECA
+y quitar la última marca de la tabla de IAE
+
+update IAE set PUNTO_KILO_LOCAL=null where PUNTO_KILO_LOCAL='COMPL';

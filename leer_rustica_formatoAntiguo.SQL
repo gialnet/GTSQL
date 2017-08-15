@@ -1,0 +1,436 @@
+/********************************************************************************
+Acción: Inserta en la BD un registro leído del disco.
+MODIFICACIÓN: 23/08/2001 Agustin Leon Robles.
+MODIFICACIÓN: 12/09/2001 Lucas Fernández Pérez. Adaptación al euro.
+MODIFICACIÓN: 30/10/2001 M. Carmen Junco Gómez. Buscar también por nif la 
+		  domiciliación del año anterior.
+MODIFICACIÓN: 26/03/2002 M. Carmen Junco Gómez. Si en el año anterior hubo variaciones, 
+		  introduciremos los datos variados; no los que vienen en 
+	        la cinta.
+MODIFICACIÓN: 24/06/2002 M. Carmen Junco Gómez. Bonificaciones en los recibos.
+********************************************************************************/
+
+CREATE OR REPLACE PROCEDURE INSERTA_REGISTRO_RUSTICA(
+       xLINEA1 	  	IN CHAR,
+       xLINEA2 	  	IN CHAR,
+       xMUNICIPIO 	IN CHAR,
+       xYEAR 	  	IN CHAR)
+AS
+	xCOD_DELEGACION_MEH           CHAR(2);
+	xCOD_MUNICIPIO                CHAR(3);
+	xNUM_FIJO                     CHAR(8);
+	xCOEFICIENTE_PARTICI          FLOAT;
+	xIDENTIFICACION               CHAR(15);
+	xCOD_GERENCIA                 CHAR(1);
+	xCOD_PROVI_INE                CHAR(2);
+	xCOD_MUNI_INE                 CHAR(3);
+	xNIF                          CHAR(10);
+	xPERSONALIDAD                 CHAR(1);
+	xNOMBRE                       CHAR(60);
+	xINDI_COMUNIDAD_BIENES        CHAR(1);
+	xNUMERO_COMPONENTES           CHAR(3);
+	xCOD_DEL_MEH                  CHAR(2);
+	xCOD_MUNICIPIO_DGC            CHAR(3);
+	xCOD_PROVI_INE_FISCAL         CHAR(2);
+	xCOD_MUNI_INE_FISCAL          CHAR(3);
+	xCOD_VIA_PUBLICA              CHAR(5);
+	xTIPO_VIA                     CHAR(5);
+	xNOMBRE_VIA                   CHAR(25);
+	xPRIMER_NUMERO                CHAR(4);
+	xPRIMERA_LETRA                CHAR(1);
+	xSEGUNDO_NUMERO               CHAR(4);
+	xSEGUNDA_LETRA                CHAR(1);
+	xKILOMETRO                    CHAR(5);
+	xBLOQUE                       CHAR(4);
+	xTEXTO_DIRECCION              CHAR(25);
+	xESCALERA                     CHAR(2);
+	xPLANTA                       CHAR(3);
+	xPUERTA                       CHAR(3);
+	xCODIGO_POSTAL                CHAR(5);
+	xAPARTADO_CORREOS             CHAR(5);
+	xPAIS                         CHAR(25);
+	xPROVINCIA                    CHAR(25);
+	xMUNICIPIO_FISCAL             CHAR(25);
+	xVALOR_CATASTRAL              CHAR(12);
+	xYEAR_ULTIMA_REVISION         CHAR(4);
+	xYEAR_ALTA_PADRON             CHAR(4);
+	xINDICADO_EXENTO              CHAR(1);
+	xSUPERFICIE_TOTAL             FLOAT;
+	xVALOR_TOTAL                  CHAR(12);
+	xYEAR_BONI				CHAR(4);
+	xMES					CHAR(2);
+	xBONI					FLOAT;
+	xARTICULO				CHAR(6);
+	xDOMICILIADO                  CHAR(1);
+	xENTIDAD                      CHAR(4);
+	xSUCURSAL                     CHAR(4);
+	xDC                           CHAR(2);
+	xCUENTA                       CHAR(10);
+	xF_DOMICILIACION			DATE;
+	xDNI_FACTURA                  CHAR(10);
+	xID_CONCEPTO   			INTEGER;
+
+	xREPRESENTANTE			CHAR(10);
+	xIDDOMIALTER			INTEGER;
+	xCOTITULARES			CHAR(1);
+
+	xNIF_old 				char(10);
+	xNOMBRE_old 			char(60);
+	xTIPO_VIA_FISCAL_old		CHAR(5);
+	xNOMBRE_VIA_FISCAL_old		CHAR(25);
+	xPRIMER_NUMERO_FISCAL_old	CHAR(4);
+	xESCALERA_FISCAL_old		CHAR(2);
+	xPLANTA_FISCAL_old		CHAR(3);
+	xPUERTA_FISCAL_old		CHAR(3);
+	xCOD_POSTAL_FISCAL_old		CHAR(5);
+	xMUNICIPIO_FISCAL_old		CHAR(25);
+	xPROVINCIA_old			CHAR(25);
+	xPAIS_OLD				CHAR(25);
+
+	xIDRUS80				INTEGER;
+	mNIF					CHAR(10);  --vamos a guardar el NIF actual del registro
+	xVARIACION				CHAR(1);
+	xCORREGIDOS				CHAR(1);
+
+BEGIN
+
+    xCOD_DELEGACION_MEH := SUBSTR(xLINEA1, 4, 2);
+    xCOD_MUNICIPIO := SUBSTR(xLINEA1, 6, 3);
+    xNUM_FIJO := SUBSTR(xLINEA1, 28, 8);
+    xCOEFICIENTE_PARTICI:=
+		TO_NUMBER(SUBSTR(xLINEA1, 36, 3)|| '.'||SUBSTR(xLINEA1, 39, 2),'999.99');
+    xIDENTIFICACION := SUBSTR(xLINEA1, 41, 15);
+    xCOD_GERENCIA := SUBSTR(xLINEA1, 56, 1);
+    xCOD_PROVI_INE := SUBSTR(xLINEA1, 57, 2);
+    xCOD_MUNI_INE := SUBSTR(xLINEA1, 59, 3);
+    xNIF := SUBSTR(xLINEA1, 72, 9);
+    mNIF := xNIF;
+    xPERSONALIDAD := SUBSTR(xLINEA1, 81, 1);
+    xNOMBRE := SUBSTR(xLINEA1, 82, 60);
+    xINDI_COMUNIDAD_BIENES := SUBSTR(xLINEA1, 142, 1);
+    xNUMERO_COMPONENTES := SUBSTR(xLINEA1, 143, 3);
+    xCOD_DEL_MEH := SUBSTR(xLINEA1, 152, 2);
+    xCOD_MUNICIPIO_DGC := SUBSTR(xLINEA1, 154, 3);
+    xCOD_PROVI_INE_FISCAL := SUBSTR(xLINEA1, 157, 2);
+    xCOD_MUNI_INE_FISCAL := SUBSTR(xLINEA1, 159, 3);
+    xCOD_VIA_PUBLICA := SUBSTR(xLINEA1, 162, 5);
+    xTIPO_VIA := SUBSTR(xLINEA1, 167, 5);
+    xNOMBRE_VIA := SUBSTR(xLINEA1, 172, 25);
+    xPRIMER_NUMERO := SUBSTR(xLINEA1, 197, 4);
+    xPRIMERA_LETRA := SUBSTR(xLINEA1, 201, 1);
+    xSEGUNDO_NUMERO := SUBSTR(xLINEA1, 202, 4);
+    xSEGUNDA_LETRA := SUBSTR(xLINEA2, 6, 1);
+    xKILOMETRO := SUBSTR(xLINEA2, 7, 5);
+    xBLOQUE := SUBSTR(xLINEA2, 12, 4);
+    xTEXTO_DIRECCION := SUBSTR(xLINEA2, 16, 25);
+    xESCALERA := SUBSTR(xLINEA2, 41, 2);
+    xPLANTA := SUBSTR(xLINEA2, 43, 3);
+    xPUERTA := SUBSTR(xLINEA2, 46, 3);
+    xCODIGO_POSTAL := SUBSTR(xLINEA2, 49, 5);
+    xAPARTADO_CORREOS := SUBSTR(xLINEA2, 54, 5);
+    xPAIS := SUBSTR(xLINEA2, 59, 25);
+    xPROVINCIA := SUBSTR(xLINEA2, 84, 25);
+    xMUNICIPIO_FISCAL := SUBSTR(xLINEA2, 109, 25);
+    xVALOR_CATASTRAL := SUBSTR(xLINEA2, 142, 12);
+    xYEAR_ULTIMA_REVISION := SUBSTR(xLINEA2, 154, 4);
+    xYEAR_ALTA_PADRON := SUBSTR(xLINEA2, 158, 4);
+    xINDICADO_EXENTO := SUBSTR(xLINEA2, 162, 1);
+    xSUPERFICIE_TOTAL := TO_NUMBER(SUBSTR(xLINEA2, 163, 10),'9999999999')/10000;
+    xVALOR_TOTAL := SUBSTR(xLINEA2, 173, 12);
+
+
+    -- Tendremos que averiguar si ha habido alguna variación del registro que
+    -- queremos insertar en años anteriores. Para ello hacemos uso de la tabla 
+    -- HIS_CARGOREAL_RUS.   
+   
+    -- el Nif es un dato que se puede variar, con lo cual tendremos que hacer dos
+    -- comprobaciones, ya que si este dato se modificó en un año anterior, no sabemos
+    -- si en la cinta de este año vendrá ya corregido o sin corregir.
+
+    SELECT MAX(IDRUS80) INTO xIDRUS80
+    FROM HIS_CARGOREAL_RUS
+    WHERE AYTO=xMUNICIPIO AND NUM_FIJO=xNUM_FIJO AND NIF_OLD=xNIF AND 
+	    TIPO_VARIACION='M' AND ULTIMA_VARIACION='N';
+
+    IF xIDRUS80 IS NULL THEN	
+       xVARIACION:='N';
+    ELSE
+	 xVARIACION:='S';
+    END IF;        
+
+    IF xVARIACION='N' THEN      
+       SELECT MAX(IDRUS80) INTO xIDRUS80
+	 FROM HIS_CARGOREAL_RUS
+	 WHERE AYTO=xMUNICIPIO AND NUM_FIJO=xNUM_FIJO AND NIF_NEW=xNIF AND
+	       TIPO_VARIACION='M' AND ULTIMA_VARIACION='N';
+	 
+	 IF xIDRUS80 IS NULL THEN
+	    xVARIACION:='N';	
+	 ELSE
+	    xVARIACION:='S';
+       END IF;
+    END IF;
+
+    IF xVARIACION='S' THEN
+       SELECT NIF_NEW INTO xNIF FROM HIS_CARGOREAL_RUS
+	 WHERE IDRUS80=xIDRUS80;
+    END IF;
+
+    -- en este punto ya tenemos almacenado el nif con el que tenemos que trabajar en xNIF
+    -- y sabemos si ha habido o no variación en los datos a través de xVARIACION
+
+    -- lee los datos de la domiciliacion de la cinta del año anterior,
+    -- tambien los datos del representante,domicilios alternativos,cotitulares y 
+    -- posibles datos que estén variados en el año anterior.
+    begin
+	SELECT DOMICILIADO,ENTIDAD,SUCURSAL,DC,CUENTA,F_DOMICILIACION,
+		 YEAR_BONI,MES_BONI,BONIFICACION,ARTICULO, 
+		 DNI_FACTURA,REPRESENTANTE,IDDOMIALTER,COTITULARES,
+		 NIF,NOMBRE,TIPO_VIA,NOMBRE_VIA,PRIMER_NUMERO,ESCALERA,PLANTA,PUERTA,
+             CODIGO_POSTAL,MUNICIPIO_FISCAL,PROVINCIA,PAIS
+	INTO xDOMICILIADO, xENTIDAD, xSUCURSAL, xDC,xCUENTA,xF_DOMICILIACION, 
+	     xYEAR_BONI,xMES,xBONI,xARTICULO,	
+	     xDNI_FACTURA,xREPRESENTANTE,xIDDOMIALTER,xCOTITULARES,
+	     xNIF_OLD,xNOMBRE_OLD,xTIPO_VIA_FISCAL_OLD,xNOMBRE_VIA_FISCAL_OLD,
+           xPRIMER_NUMERO_FISCAL_OLD,xESCALERA_FISCAL_OLD,xPLANTA_FISCAL_OLD,
+           xPUERTA_FISCAL_OLD,xCOD_POSTAL_FISCAL_OLD,xMUNICIPIO_FISCAL_OLD,
+           xPROVINCIA_OLD,xPAIS_OLD
+	FROM RUS80 WHERE MUNICIPIO=xMUNICIPIO AND
+			     YEAR=xYEAR-1 AND
+			     NUM_FIJO=xNUM_FIJO AND
+		  	     NIF=xNIF;
+	EXCEPTION
+	   when no_data_found then
+		xDOMICILIADO:=Null;
+		xENTIDAD:=Null;
+		xSUCURSAL:=Null; 
+		xDC:=Null;
+		xCUENTA:=Null;
+		xF_DOMICILIACION:=Null;
+		xYEAR_BONI:=Null;
+		xMES:=Null;
+		xBONI:=Null;
+		xARTICULO:=Null;
+		xDNI_FACTURA:=Null;		
+		xREPRESENTANTE:=Null;
+		xIDDOMIALTER:=Null;
+		xCOTITULARES:=Null;
+    end;
+
+    -- si ha habido variación cambiamos los datos de la cinta por estos otros recogidos
+    -- de los datos del año anterior.
+    IF xVARIACION='S' THEN	   
+	   -- antes de hacer el cambio comprobaremos si los datos que vienen en la Cinta de 
+	   -- Hacienda este año vienen ya corregidos o no.
+	   IF (mNIF=xNIF AND
+		 xNOMBRE=xNOMBRE_old AND
+		 xTIPO_VIA=xTIPO_VIA_FISCAL_old AND
+		 xNOMBRE_VIA=xNOMBRE_VIA_FISCAL_old AND
+		 xPRIMER_NUMERO=xPRIMER_NUMERO_FISCAL_old AND
+		 xESCALERA=xESCALERA_FISCAL_old AND
+		 xPLANTA=xPLANTA_FISCAL_old AND
+		 xPUERTA=xPUERTA_FISCAL_old AND
+		 xCODIGO_POSTAL=xCOD_POSTAL_FISCAL_old AND
+		 xMUNICIPIO_FISCAL=xMUNICIPIO_FISCAL_old AND
+		 xPROVINCIA=xPROVINCIA_old AND
+		 xPAIS=xPAIS_OLD) THEN
+
+		-- Si los datos están corregidos lo indicamos en la tabla HIS_CARGOREAL_RUS 
+		-- modificando el valor de ULTIMA_VARIACION='S' para la tupla de variaciones 
+		-- con IDRUS80=xIDRUS80
+		xCORREGIDOS:='S';
+		UPDATE HIS_CARGOREAL_RUS SET ULTIMA_VARIACION='S'    
+            WHERE IDRUS80=xIDRUS80;
+         ELSE
+	      xCORREGIDOS:='N';
+		xNIF:=xNIF_old;
+	      xNOMBRE:=xNOMBRE_old;
+	      xTIPO_VIA:=xTIPO_VIA_FISCAL_old;
+	      xNOMBRE_VIA:=xNOMBRE_VIA_FISCAL_old;
+            xPRIMER_NUMERO:=xPRIMER_NUMERO_FISCAL_old;
+	      xESCALERA:=xESCALERA_FISCAL_old;
+	      xPLANTA:=xPLANTA_FISCAL_old;
+            xPUERTA:=xPUERTA_FISCAL_old;
+	      xCODIGO_POSTAL:=xCOD_POSTAL_FISCAL_old;
+	      xMUNICIPIO_FISCAL:=xMUNICIPIO_FISCAL_old;
+            xPROVINCIA:=xPROVINCIA_old;
+	      xPAIS:=xPAIS_OLD;		
+	   END IF;
+    END IF;   
+
+    InsertaModiContribuyente(xNIF,substr(xNOMBRE,1,40),
+			substr(xTIPO_VIA,1,2),xNOMBRE_VIA,
+			xPRIMER_NUMERO,xESCALERA,xPLANTA,
+			substr(xPUERTA,1,2),
+			xMUNICIPIO_FISCAL,xPROVINCIA,xCODIGO_POSTAL,xPAIS);
+
+    IF xDOMICILIADO IS NULL THEN
+		xDOMICILIADO:='N';
+		xSUCURSAL:=NULL;
+		xDC:=NULL;
+		xCUENTA:=NULL;
+		xF_DOMICILIACION:=NULL;
+		xDNI_FACTURA:=NULL;
+		xREPRESENTANTE:=NULL;
+		xIDDOMIALTER:=NULL;
+		xCOTITULARES:='N';
+    END IF;
+
+    IF xYEAR_BONI IS NULL THEN
+      	xYEAR_BONI:='0000';
+		xMES:='00';
+		xBONI:=0;
+		xARTICULO:='';
+    END IF;
+
+    INSERT INTO RUS80
+      (MUNICIPIO,YEAR,COD_DELEGACION_MEH,COD_MUNICIPIO,
+       NUM_FIJO,COEFICIENTE_PARTICI,IDENTIFICACION,COD_GERENCIA,
+       COD_PROVI_INE,COD_MUNI_INE,NIF,PERSONALIDAD,NOMBRE,
+       INDI_COMUNIDAD_BIENES,NUMERO_COMPONENTES,COD_DEL_MEH,
+       COD_MUNICIPIO_DGC,COD_PROVI_INE_FISCAL,COD_MUNI_INE_FISCAL,
+       COD_VIA_PUBLICA,TIPO_VIA,NOMBRE_VIA,PRIMER_NUMERO,
+       PRIMERA_LETRA,SEGUNDO_NUMERO,SEGUNDA_LETRA,KILOMETRO,BLOQUE,
+       TEXTO_DIRECCION,ESCALERA,PLANTA,PUERTA,CODIGO_POSTAL,
+       APARTADO_CORREOS,PAIS,PROVINCIA,MUNICIPIO_FISCAL,
+       VALOR_CATASTRAL,YEAR_ULTIMA_REVISION,YEAR_ALTA_PADRON,
+       INDICADO_EXENTO,SUPERFICIE_TOTAL,VALOR_TOTAL,
+       DOMICILIADO,ENTIDAD,SUCURSAL,DC,CUENTA,F_DOMICILIACION,
+	 YEAR_BONI,MES_BONI,BONIFICACION,ARTICULO,
+	 DNI_FACTURA,REPRESENTANTE,IDDOMIALTER,COTITULARES)
+    VALUES
+      (xMUNICIPIO,xYEAR,xCOD_DELEGACION_MEH,xCOD_MUNICIPIO,
+       xNUM_FIJO,xCOEFICIENTE_PARTICI,xIDENTIFICACION,
+       xCOD_GERENCIA,xCOD_PROVI_INE,xCOD_MUNI_INE,xNIF,
+       xPERSONALIDAD,xNOMBRE,xINDI_COMUNIDAD_BIENES,
+       xNUMERO_COMPONENTES,xCOD_DEL_MEH,xCOD_MUNICIPIO_DGC,
+       xCOD_PROVI_INE_FISCAL,xCOD_MUNI_INE_FISCAL,
+       xCOD_VIA_PUBLICA,xTIPO_VIA,xNOMBRE_VIA,xPRIMER_NUMERO,
+       xPRIMERA_LETRA,xSEGUNDO_NUMERO,xSEGUNDA_LETRA,xKILOMETRO,
+       xBLOQUE,xTEXTO_DIRECCION,xESCALERA,xPLANTA,xPUERTA,
+       xCODIGO_POSTAL,xAPARTADO_CORREOS,xPAIS,xPROVINCIA,
+       xMUNICIPIO_FISCAL,
+	 TO_CHAR(TO_NUMBER(xVALOR_CATASTRAL),'9999999999,99'), 
+	 xYEAR_ULTIMA_REVISION, xYEAR_ALTA_PADRON,xINDICADO_EXENTO,xSUPERFICIE_TOTAL,
+	 TO_CHAR(TO_NUMBER(xVALOR_TOTAL),'9999999999,99'), 
+	 xDOMICILIADO,xENTIDAD,xSUCURSAL,xDC,xCUENTA,xF_DOMICILIACION,
+	 xYEAR_BONI,xMES,xBONI,xARTICULO,
+       xDNI_FACTURA,xREPRESENTANTE,xIDDOMIALTER,xCOTITULARES)
+    RETURNING ID INTO xIDRUS80;
+    
+    -- si no vienen los datos corregidos en la cinta de este año, insertamos una nueva tupla 
+    -- de variaciones, indicando que la ha generado el programa automáticamente 
+    -- (no se debe a una variación manual por parte del usuario a petición del sujeto pasivo)
+
+    IF (xCORREGIDOS='N') THEN
+       --recogemos de nuevo los datos que venían en cinta y que no debemos perder.	 
+       xNOMBRE := SUBSTR(xLINEA1, 82, 60);       
+       xTIPO_VIA := SUBSTR(xLINEA1, 167, 5);
+       xNOMBRE_VIA := SUBSTR(xLINEA1, 172, 25);
+       xPRIMER_NUMERO := SUBSTR(xLINEA1, 197, 4);     
+       xESCALERA := SUBSTR(xLINEA2, 41, 2);
+       xPLANTA := SUBSTR(xLINEA2, 43, 3);
+       xPUERTA := SUBSTR(xLINEA2, 46, 3);
+       xCODIGO_POSTAL := SUBSTR(xLINEA2, 49, 5);
+       xMUNICIPIO_FISCAL := SUBSTR(xLINEA2, 109, 25);
+       xPROVINCIA := SUBSTR(xLINEA2, 84, 25);
+       xPAIS := SUBSTR(xLINEA2, 59, 25);    
+
+       INSERT INTO HIS_CARGOREAL_RUS
+ 	    (IDRUS80,AYTO,TIPO_VARIACION,NUM_FIJO,NIF_NEW,NIF_OLD,NOMBRE,
+	     TIPO_VIA_FISCAL,NOMBRE_VIA_FISCAL,PRIMER_NUMERO_FISCAL,ESCALERA_FISCAL,
+	     PLANTA_FISCAL,PUERTA_FISCAL,COD_POSTAL_FISCAL,MUNICIPIO_FISCAL,PROVINCIA,
+	     PAIS)
+        VALUES
+	     (xIDRUS80,xMUNICIPIO,'A',xNUM_FIJO,xNIF,mNIF,xNOMBRE,xTIPO_VIA,xNOMBRE_VIA,
+		xPRIMER_NUMERO,xESCALERA,xPLANTA,xPUERTA,xCODIGO_POSTAL,
+		xMUNICIPIO_FISCAL,xPROVINCIA,xPAIS);
+
+    END IF;
+
+END;
+/
+
+/********************************************************************************
+Acción: Inserta en rus81 el detalle del registro leído del disco.
+MODIFICACIÓN: 12/09/2001 Lucas Fernández Pérez. Adaptación al euro.
+********************************************************************************/
+
+CREATE OR REPLACE PROCEDURE INSERTA_RUSTICA_DETALLE(
+       xLINEA1 		IN CHAR,
+       xMUNICIPIO 	IN CHAR,
+       xYEAR 		IN CHAR)
+AS
+
+	xID                           INTEGER;
+	xABON                         INTEGER;
+	xNIF					CHAR(10);
+	xCOD_DELEGACION_MEH           CHAR(2);
+	xCOD_MUNICIPIO                CHAR(3);
+	xCOD_MUNICIPIO_ORIGEN         CHAR(3);
+	xCOD_ZONA                     CHAR(2);
+	xCOD_POLIGONO_CATASTRAL       CHAR(3);
+	xNUMERO_PARCELA               CHAR(5);
+	xPRIMER_CONTROL               CHAR(1);
+	xSEGUNDO_CONTROL              CHAR(1);
+	xNUM_FIJO                     CHAR(8);
+	xIDENTIFICACION               CHAR(15);
+	xCOD_GERENCIA                 CHAR(1);
+	xCOD_PROVI_INE                CHAR(2);
+	xCOD_MUNI_INE                 CHAR(3);
+	xENTIDAD_SINGULAR             CHAR(2);
+	xPARAJE                       CHAR(20);
+	xTIPO_PARCELA                 CHAR(1);
+	xREGIMEN_TITULARIDAD          CHAR(2);
+	xSUPERFICIE                   FLOAT;
+	xVALOR_CATASTRAL              CHAR(12);
+	xVALOR_PARCELA                CHAR(12);
+
+BEGIN
+    xCOD_DELEGACION_MEH := SUBSTR(xLINEA1, 4, 2);
+    xCOD_MUNICIPIO := SUBSTR(xLINEA1, 6, 3);
+    xCOD_MUNICIPIO_ORIGEN := SUBSTR(xLINEA1, 9, 3);
+    xCOD_ZONA := SUBSTR(xLINEA1, 12, 2);
+    xCOD_POLIGONO_CATASTRAL := SUBSTR(xLINEA1, 14, 3);
+    xNUMERO_PARCELA := SUBSTR(xLINEA1, 17, 5);
+    xPRIMER_CONTROL := SUBSTR(xLINEA1, 22, 1);
+    xSEGUNDO_CONTROL := SUBSTR(xLINEA1, 23, 1);
+    xNUM_FIJO := SUBSTR(xLINEA1, 28, 8);
+    xIDENTIFICACION := SUBSTR(xLINEA1, 36, 15);
+    xCOD_GERENCIA := SUBSTR(xLINEA1, 51, 1);
+    xCOD_PROVI_INE := SUBSTR(xLINEA1, 52, 2);
+    xCOD_MUNI_INE := SUBSTR(xLINEA1, 54, 3);
+    xENTIDAD_SINGULAR := SUBSTR(xLINEA1, 57, 2);
+    xPARAJE := SUBSTR(xLINEA1, 59, 20);
+    xTIPO_PARCELA := SUBSTR(xLINEA1, 79, 1);
+    xREGIMEN_TITULARIDAD := SUBSTR(xLINEA1, 80, 2);
+    xSUPERFICIE :=TO_NUMBER(SUBSTR(xLINEA1,92,10),'9999999999')/10000;
+    xVALOR_CATASTRAL := SUBSTR(xLINEA1, 102, 12);
+    xVALOR_PARCELA := SUBSTR(xLINEA1, 114, 12);
+
+
+	-- en este campo esta grabado por un trigger de rus80 el valor del último ID
+	SELECT LAST_INT INTO xABON FROM USUARIOSGT WHERE USUARIO=USER;
+
+	SELECT NIF INTO xNIF FROM RUS80 WHERE ID=xABON;
+
+	INSERT INTO RUS81
+      (ABONADO,MUNICIPIO,YEAR,COD_DELEGACION_MEH,COD_MUNICIPIO,
+       COD_MUNICIPIO_ORIGEN,COD_ZONA,COD_POLIGONO_CATASTRAL,
+       NUMERO_PARCELA,PRIMER_CONTROL,SEGUNDO_CONTROL,
+       NUM_FIJO,IDENTIFICACION,COD_GERENCIA,COD_PROVI_INE,
+       COD_MUNI_INE,ENTIDAD_SINGULAR,PARAJE,TIPO_PARCELA,
+       REGIMEN_TITULARIDAD,SUPERFICIE,VALOR_CATASTRAL,VALOR_PARCELA)
+	VALUES
+      (xABON,xMUNICIPIO,xYEAR,xCOD_DELEGACION_MEH,xCOD_MUNICIPIO,
+       xCOD_MUNICIPIO_ORIGEN,xCOD_ZONA,xCOD_POLIGONO_CATASTRAL,
+       xNUMERO_PARCELA,xPRIMER_CONTROL,xSEGUNDO_CONTROL,
+       xNUM_FIJO,xIDENTIFICACION,xCOD_GERENCIA,xCOD_PROVI_INE,
+       xCOD_MUNI_INE,xENTIDAD_SINGULAR,xPARAJE,xTIPO_PARCELA,
+       xREGIMEN_TITULARIDAD,xSUPERFICIE,
+	 TO_CHAR(TO_NUMBER(xVALOR_CATASTRAL),'9999999999,99'), 
+	 TO_CHAR(TO_NUMBER(xVALOR_PARCELA),'9999999999,99'));
+
+
+END;
+/
